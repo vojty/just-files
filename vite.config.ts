@@ -28,7 +28,15 @@ export default defineConfig({
     // Fail when the port is taken instead of moving to the next one, which
     // left forgotten servers behind.
     strictPort: true,
-    // The Go server's port (-port), set by scripts/run.sh.
-    proxy: { "/api": `http://localhost:${process.env.API_PORT ?? 8080}` },
+    proxy: {
+      "/api": {
+        // The Go server's port (-port), set by scripts/run.sh.
+        target: `http://localhost:${process.env.API_PORT ?? 8080}`,
+        // Keep the Host header: the Go server rejects changes whose Origin
+        // differs from the Host (cross-origin protection), and browsers on
+        // plain HTTP LAN addresses send no Sec-Fetch-Site to tell otherwise.
+        changeOrigin: false,
+      },
+    },
   },
 });
