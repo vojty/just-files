@@ -165,7 +165,9 @@ function Browser() {
               </div>
             </div>
 
-            <div className="overflow-hidden rounded-xl border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900">
+            {/* shrink-0: with overflow hidden, the card could otherwise shrink to
+                the panel's height and clip the rows instead of the panel scrolling. */}
+            <div className="shrink-0 overflow-hidden rounded-xl border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900">
               {q ? (
                 <SearchPanel
                   path={dir}
