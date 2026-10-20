@@ -7,18 +7,21 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/fs"
 	"log/slog"
 	"net/http"
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/adapters/humago"
 
+	"just-files/internal/fileinfo"
 	"just-files/internal/index"
 )
 
@@ -49,20 +52,30 @@ type Server struct {
 	UIDir  string // built web UI; empty or missing serves only the API
 	Logger *slog.Logger
 
-	root     *os.Root
-	rootPath string // absolute path of the root folder
-	index    *index.Index
-	settings *settingsStore
-	started  time.Time
+	root          *os.Root
+	rootPath      string   // absolute path of the root folder
+	searchExclude []string // folders left out of search, relative to the root
+	index         *index.Index
+	settings      *settingsStore
+	started       time.Time
 }
 
 // New returns a server managing the files under dir, with the settings
 // saved in settingsFile. Run the returned server's Index to fill the search
-// index.
-func New(dir, uiDir, settingsFile string, logger *slog.Logger) (*Server, error) {
+// index, which leaves out the folders in searchExclude (relative to dir, a
+// leading slash is ignored) and kernel filesystems such as /proc.
+func New(dir, uiDir, settingsFile string, searchExclude []string, logger *slog.Logger) (*Server, error) {
 	abs, err := filepath.Abs(dir)
 	if err != nil {
 		return nil, err
+	}
+	var exclude []string
+	for _, e := range searchExclude {
+		p := path.Clean(strings.TrimLeft(filepath.ToSlash(e), "/"))
+		if p == "." || !fs.ValidPath(p) {
+			return nil, fmt.Errorf("search exclude %q: not a folder inside %s", e, abs)
+		}
+		exclude = append(exclude, p)
 	}
 	settings, err := loadSettings(settingsFile)
 	if err != nil {
@@ -73,15 +86,38 @@ func New(dir, uiDir, settingsFile string, logger *slog.Logger) (*Server, error) 
 		return nil, err
 	}
 	s := &Server{
-		UIDir:    uiDir,
-		Logger:   logger,
-		root:     root,
-		rootPath: abs,
-		settings: settings,
-		started:  time.Now(),
+		UIDir:         uiDir,
+		Logger:        logger,
+		root:          root,
+		rootPath:      abs,
+		searchExclude: exclude,
+		settings:      settings,
+		started:       time.Now(),
 	}
-	s.index = index.New(root.FS(), func() bool { return settings.get().ShowHidden }, logger.With("component", "index"))
+	s.index = index.New(root.FS(), func() bool { return settings.get().ShowHidden }, s.searchSkip, logger.With("component", "index"))
 	return s, nil
+}
+
+// searchSkip returns the folders to leave out of search: the excluded ones
+// and where kernel filesystems are mounted, like /proc when serving /.
+// Mounts are read before each scan, as they change.
+func (s *Server) searchSkip() []string {
+	skip := slices.Clone(s.searchExclude)
+	mounts, err := fileinfo.VirtualMounts()
+	if err != nil {
+		s.Logger.Warn("reading mounts", "error", err)
+	}
+	// Mount points are real paths.
+	root := s.rootPath
+	if real, err := filepath.EvalSymlinks(root); err == nil {
+		root = real
+	}
+	for _, m := range mounts {
+		if rel, err := filepath.Rel(root, m); err == nil && rel != "." && filepath.IsLocal(rel) {
+			skip = append(skip, filepath.ToSlash(rel))
+		}
+	}
+	return skip
 }
 
 // Close releases the root folder handle.

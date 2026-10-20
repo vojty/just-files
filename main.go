@@ -29,6 +29,7 @@ type config struct {
 	port         int
 	uiDir        string
 	scanInterval time.Duration
+	scanExclude  string
 	logLevel     string
 	logFormat    string
 }
@@ -72,6 +73,7 @@ func parseConfig() config {
 	flag.IntVar(&c.port, "port", envInt("PORT", 8080), "web UI port [PORT]")
 	flag.StringVar(&c.uiDir, "ui-dir", env("UI_DIR", "ui/dist"), "folder with the built web UI [UI_DIR]")
 	flag.DurationVar(&c.scanInterval, "scan-interval", envDuration("SCAN_INTERVAL", 10*time.Minute), "how often to rescan the folder for search, 0 disables; changes made in the UI trigger a rescan anyway [SCAN_INTERVAL]")
+	flag.StringVar(&c.scanExclude, "scan-exclude", env("SCAN_EXCLUDE", ""), "comma-separated folders inside the folder to leave out of search, e.g. var/lib/docker; kernel filesystems such as /proc are always left out [SCAN_EXCLUDE]")
 	flag.StringVar(&c.logLevel, "log-level", env("LOG_LEVEL", "info"), "debug, info, warn or error [LOG_LEVEL]")
 	flag.StringVar(&c.logFormat, "log-format", env("LOG_FORMAT", "auto"), "auto, pretty, text or json; auto is pretty on a terminal, text otherwise [LOG_FORMAT]")
 	flag.Parse()
@@ -130,7 +132,13 @@ func main() {
 }
 
 func run(c config, logger *slog.Logger) error {
-	srv, err := server.New(c.rootPath, c.uiDir, c.configFile, logger.With("component", "server"))
+	var exclude []string
+	for p := range strings.SplitSeq(c.scanExclude, ",") {
+		if p = strings.TrimSpace(p); p != "" {
+			exclude = append(exclude, p)
+		}
+	}
+	srv, err := server.New(c.rootPath, c.uiDir, c.configFile, exclude, logger.With("component", "server"))
 	if err != nil {
 		return err
 	}
@@ -152,7 +160,7 @@ func run(c config, logger *slog.Logger) error {
 
 	go srv.Index().Run(ctx, c.scanInterval)
 
-	logger.Info("starting", "path", c.rootPath, "port", c.port, "config", c.configFile, "scan_interval", c.scanInterval)
+	logger.Info("starting", "path", c.rootPath, "port", c.port, "config", c.configFile, "scan_interval", c.scanInterval, "scan_exclude", exclude)
 
 	errc := make(chan error, 1)
 	go func() {

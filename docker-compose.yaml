@@ -23,6 +23,10 @@ services:
       # How often the search index rescans the folder for changes made
       # outside the web UI.
       SCAN_INTERVAL: 10m
+      # Folders left out of search, comma-separated: Docker's copies of
+      # every image's files would be most of the index. /proc and /sys are
+      # left out anyway.
+      SCAN_EXCLUDE: var/lib/docker,var/lib/containerd
     volumes:
       # The folder shown in the web UI: the server's whole filesystem. Add
       # `read_only: true` under this entry to only browse and download.
@@ -59,6 +63,9 @@ services:
         - container: SCAN_INTERVAL
           description:
             en_us: How often search rescans the folder for outside changes, e.g. 10m
+        - container: SCAN_EXCLUDE
+          description:
+            en_us: Comma-separated folders left out of search, e.g. var/lib/docker
       volumes:
         - container: /data
           description:

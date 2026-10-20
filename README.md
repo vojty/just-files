@@ -51,6 +51,7 @@ server. Adjust the folder there, or mark it `read_only: true`, if needed.
 | `-config` | `CONFIG_FILE` | `~/.config/just-files/settings.json` | settings file, written by the Settings page |
 | `-ui-dir` | `UI_DIR` | `ui/dist` | folder with the built web UI |
 | `-scan-interval` | `SCAN_INTERVAL` | `10m` | how often to rescan the folder for search, `0` disables |
+| `-scan-exclude` | `SCAN_EXCLUDE` | | comma-separated folders inside the folder to leave out of search, e.g. `var/lib/docker` |
 | `-log-level` | `LOG_LEVEL` | `info` | `debug`, `info`, `warn` or `error` |
 | `-log-format` | `LOG_FORMAT` | `auto` | `auto`, `pretty`, `text` or `json` |
 
@@ -69,7 +70,9 @@ for everyone, and are saved to the settings file:
   server's user may not read give a clear "no permission" error (403).
 - **Search** filters an in-memory index of every file and folder name
   (`internal/index`), so results come back in milliseconds instead of walking
-  the disk per query. The index is rebuilt by a full walk at startup, every
+  the disk per query. It holds only names, about 50 bytes per entry, and
+  leaves out kernel filesystems such as `/proc` and `/sys` and the
+  `-scan-exclude` folders. The index is rebuilt by a full walk at startup, every
   `-scan-interval`, and about a second after changes made in the UI. Changes
   made to the folder by other programs show up in search after the next scan;
   browsing always shows the folder as it is on disk.

@@ -41,19 +41,15 @@ func (s *Server) search(ctx context.Context, in *searchInput) (*response[SearchR
 		return nil, s.fail(ctx, err)
 	}
 	found, total := s.index.Search(scope, in.Query, in.Limit)
-	entries := make([]FileEntry, len(found))
-	for i, e := range found {
-		entries[i] = FileEntry{
-			Name:    e.Name,
-			Path:    e.Path,
-			IsDir:   e.IsDir,
-			Size:    e.Size,
-			ModTime: e.ModTime,
-			Kind:    kind(e.Name, e.IsDir),
-			Mode:    e.Mode.String(),
-			Owner:   e.Owner,
-			Group:   e.Group,
+	// The index has only names; entries gone since the last scan are left
+	// out.
+	entries := make([]FileEntry, 0, len(found))
+	for _, p := range found {
+		fi, err := s.root.Stat(p) // follows symlinks inside the root
+		if err != nil {
+			continue
 		}
+		entries = append(entries, newEntry(p, fi))
 	}
 	st := s.index.Status()
 	return &response[SearchResults]{SearchResults{

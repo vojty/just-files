@@ -21,7 +21,7 @@ func newTestServer(t *testing.T) (*httptest.Server, string, *Server) {
 	if err := os.WriteFile(filepath.Join(ui, "index.html"), []byte("<html>app</html>"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	s, err := New(media, ui, filepath.Join(t.TempDir(), "settings.json"), slog.New(slog.DiscardHandler))
+	s, err := New(media, ui, filepath.Join(t.TempDir(), "settings.json"), nil, slog.New(slog.DiscardHandler))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -341,7 +341,7 @@ func TestShowHidden(t *testing.T) {
 	os.Mkdir(filepath.Join(media, ".config"), 0o755)
 	start := func() (*httptest.Server, *Server) {
 		t.Helper()
-		s, err := New(media, ui, settingsFile, slog.New(slog.DiscardHandler))
+		s, err := New(media, ui, settingsFile, nil, slog.New(slog.DiscardHandler))
 		if err != nil {
 			t.Fatal(err)
 		}
