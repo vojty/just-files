@@ -1,0 +1,7 @@
+.git
+.claude
+.github
+*.md
+node_modules
+ui/dist
+docker-compose.yaml

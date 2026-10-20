@@ -1,0 +1,88 @@
+# just-files as a CasaOS app: App Store -> Custom Install -> Import
+# (docker-compose), then adjust the folder if needed. Plain Docker Compose
+# works too (`docker compose up -d`); it ignores the x-casaos parts.
+name: just-files
+services:
+  just-files:
+    image: ghcr.io/vojty/just-files:latest
+    container_name: just-files
+    restart: unless-stopped
+    ports:
+      # Web UI on http://<server>:1341, next to just-dlna's 1340.
+      - "1341:8080"
+    environment:
+      # just-files runs as this user and group. /DATA is owned by root and
+      # filled by apps running as root, so run as root too: the web UI can
+      # then upload, rename and delete anything there. The web UI has no
+      # login, so anyone on the network can do the same.
+      PUID: "0"
+      PGID: "0"
+      TZ: Europe/Prague
+      # How often the search index rescans the folder for changes made
+      # outside the web UI.
+      SCAN_INTERVAL: 10m
+    volumes:
+      # The folder shown in the web UI. Add `read_only: true` under this
+      # entry to only browse and download.
+      - type: bind
+        source: /DATA
+        target: /data
+      # The host's users and groups, so the Owner and Group columns show
+      # names instead of numbers.
+      - type: bind
+        source: /etc/passwd
+        target: /etc/passwd
+        read_only: true
+      - type: bind
+        source: /etc/group
+        target: /etc/group
+        read_only: true
+    x-casaos:
+      envs:
+        - container: PUID
+          description:
+            en_us: User ID just-files runs as (0 = root, owner of /DATA)
+        - container: PGID
+          description:
+            en_us: Group ID just-files runs as
+        - container: TZ
+          description:
+            en_us: Time zone
+        - container: SCAN_INTERVAL
+          description:
+            en_us: How often search rescans the folder for outside changes, e.g. 10m
+      volumes:
+        - container: /data
+          description:
+            en_us: Folder browsed, searched and managed in the web UI
+        - container: /etc/passwd
+          description:
+            en_us: Host users, for the Owner column (read-only)
+        - container: /etc/group
+          description:
+            en_us: Host groups, for the Group column (read-only)
+      ports:
+        - container: "8080"
+          description:
+            en_us: Web UI
+
+x-casaos:
+  architectures:
+    - amd64
+    - arm64
+  main: just-files
+  category: Utilities
+  author: vojty
+  developer: vojty
+  title:
+    en_us: just-files
+  tagline:
+    en_us: Web file browser with instant search and drag and drop uploads
+  description:
+    en_us: >-
+      Browse a folder in a folder tree beside the file list, search all file
+      names instantly, view images, video, audio, PDFs and highlighted code,
+      and upload files and whole folders by drag and drop.
+  index: /
+  port_map: "1341"
+  scheme: http
