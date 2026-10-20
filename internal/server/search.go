@@ -36,7 +36,7 @@ func (s *Server) registerSearch(api huma.API) {
 }
 
 func (s *Server) search(ctx context.Context, in *searchInput) (*response[SearchResults], error) {
-	scope, err := cleanPath(in.Path)
+	scope, err := s.cleanPath(in.Path)
 	if err != nil {
 		return nil, s.fail(ctx, err)
 	}

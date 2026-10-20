@@ -13,7 +13,14 @@ import {
   type CSSProperties,
   type ReactNode,
 } from "react";
-import { errorText, joinPath, type SearchResults } from "../api.ts";
+import {
+  ApiError,
+  describeError,
+  errorText,
+  joinPath,
+  parentPath,
+  type SearchResults,
+} from "../api.ts";
 import {
   ActionDialog,
   useFileMutations,
@@ -51,9 +58,11 @@ export const Route = createFileRoute("/")({
   }),
   // Typing a search must not reload the folder.
   loaderDeps: ({ search }) => ({ path: search.path ?? "." }),
+  // A folder that cannot be listed, e.g. for lack of permission, is shown as
+  // an error in the panel, so it is prefetched without failing the route.
   loader: ({ context, deps }) =>
     Promise.all([
-      context.queryClient.ensureQueryData(queries.files(deps.path)),
+      context.queryClient.prefetchQuery(queries.files(deps.path)),
       context.queryClient.ensureQueryData(queries.info()),
     ]),
   component: Browser,
@@ -70,14 +79,15 @@ export const Route = createFileRoute("/")({
 function Browser() {
   const { path } = Route.useLoaderDeps();
   const { q } = Route.useSearch();
-  const { data: listing } = useSuspenseQuery(queries.files(path));
+  const { data: listing, error: listingError } = useQuery(queries.files(path));
   const { data: info } = useSuspenseQuery(queries.info());
   const queryClient = useQueryClient();
-  const dir = listing.path;
+  const dir = listing?.path ?? path;
   const [action, setAction] = useState<Action | null>(null);
   const [treeOpen, setTreeOpen] = useState(false);
   const { move } = useFileMutations(dir);
   const view = useView();
+  const showHidden = useQuery(queries.settings()).data?.showHidden ?? false;
 
   const folderName = (p: string) => (p === "." ? info.name : p);
 
@@ -98,7 +108,7 @@ function Browser() {
     }
   }
 
-  const picker = useUploadPicker(upload);
+  const picker = useUploadPicker(upload, showHidden);
 
   /** Runs action: uploads open the file picker, the rest a dialog. */
   const act: OnAction = (a) => {
@@ -107,6 +117,7 @@ function Browser() {
   };
 
   const dnd = useDragDrop({
+    includeHidden: showHidden,
     onUpload: upload,
     onMove: (entry, target) =>
       move.mutate(
@@ -134,6 +145,13 @@ function Browser() {
           <span className="hidden sm:inline">just-files</span>
         </Link>
         <SearchBox q={q ?? ""} scopeName={folderName(dir)} />
+        <Link
+          to="/settings"
+          aria-label="Settings"
+          className={buttonClass("ghost", "w-9 shrink-0 px-0")}
+        >
+          <Icon name="settings" />
+        </Link>
       </header>
 
       <div className="relative flex min-h-0 flex-1">
@@ -177,6 +195,10 @@ function Browser() {
                   rootName={info.name}
                   scopeName={folderName(dir)}
                 />
+              ) : listingError ? (
+                <FolderError error={listingError} dir={dir} />
+              ) : !listing ? (
+                <Status>Loading…</Status>
               ) : listing.entries.length === 0 ? (
                 <div className="flex flex-col items-center gap-2 px-4 py-16 text-center text-sm text-neutral-500">
                   <Icon name="upload" className="size-8 text-neutral-300 dark:text-neutral-600" />
@@ -450,6 +472,25 @@ function SearchPanel({
   );
 }
 
+/** Why the folder dir cannot be shown, with a way out. */
+function FolderError({ error, dir }: { error: Error; dir: string }) {
+  const up = parentPath(dir);
+  return (
+    <div className="flex flex-col items-center gap-3 px-4 py-16 text-center text-sm">
+      <Icon
+        name={error instanceof ApiError && error.status === 403 ? "lock" : "folder"}
+        className="size-8 text-neutral-300 dark:text-neutral-600"
+      />
+      <p className="text-red-600 dark:text-red-400">{describeError(error, "this folder")}</p>
+      {dir !== "." && (
+        <Link to="/" search={{ path: up === "." ? undefined : up }} className={buttonClass()}>
+          Go to the parent folder
+        </Link>
+      )}
+    </div>
+  );
+}
+
 function Status({ error = false, children }: { error?: boolean; children: ReactNode }) {
   return (
     <div
@@ -490,13 +531,17 @@ function UploadButton({ dir, onAction }: { dir: string; onAction: OnAction }) {
  * Hidden file inputs for picking files or a whole folder to upload into a
  * folder; render inputs and call open from a click.
  */
-function useUploadPicker(onFiles: (dir: string, items: UploadItem[]) => void) {
+function useUploadPicker(
+  onFiles: (dir: string, items: UploadItem[]) => void,
+  includeHidden: boolean,
+) {
   const target = useRef(".");
   const files = useRef<HTMLInputElement>(null);
   const folder = useRef<HTMLInputElement>(null);
   const onChange = (e: ChangeEvent<HTMLInputElement>) => {
     const list = e.currentTarget.files;
-    if (list && list.length > 0) onFiles(target.current, fromFiles(Array.from(list)));
+    if (list && list.length > 0)
+      onFiles(target.current, fromFiles(Array.from(list), includeHidden));
     e.currentTarget.value = "";
   };
 

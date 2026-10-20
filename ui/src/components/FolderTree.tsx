@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
-import { errorText, type FileEntry } from "../api.ts";
+import { ApiError, describeError, type FileEntry } from "../api.ts";
 import type { DragDrop } from "../dnd.ts";
 import { queries } from "../queries.ts";
 import { useContextEntry } from "./FileContextMenu.tsx";
@@ -199,7 +199,12 @@ function TreeItem({
               className="truncate py-1 text-xs text-red-600 dark:text-red-400"
               style={{ paddingLeft: `${(depth + 1) * 0.875 + 1.625}rem` }}
             >
-              {errorText(error)}
+              {
+                // The full sentence does not fit the tree.
+                error instanceof ApiError && error.status === 403
+                  ? "No permission"
+                  : describeError(error, "this folder")
+              }
             </li>
           ) : !folders ? (
             <li

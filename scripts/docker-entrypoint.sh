@@ -4,11 +4,12 @@
 # root, e.g. for folders only root can write to. Started as another user
 # (`user:` / `--user`), it runs just-files directly.
 #
-# Unlike just-dlna, nothing is chowned: the only folder is the user's data,
-# whose owners must stay as they are.
+# Only /config, the app's own folder for its settings, is handed to
+# PUID:PGID; the data in /data keeps its owners.
 set -e
 
 if [ "$(id -u)" = 0 ] && [ "${PUID:-1000}" != 0 ]; then
+	chown -R "${PUID:-1000}:${PGID:-1000}" /config
 	exec su-exec "${PUID:-1000}:${PGID:-1000}" /usr/local/bin/just-files "$@"
 fi
 exec /usr/local/bin/just-files "$@"

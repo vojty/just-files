@@ -1,6 +1,11 @@
 # just-files as a CasaOS app: App Store -> Custom Install -> Import
 # (docker-compose), then adjust the folder if needed. Plain Docker Compose
 # works too (`docker compose up -d`); it ignores the x-casaos parts.
+#
+# It serves the server's whole filesystem, writable and as root, and the web
+# UI has no login: anyone who can reach port 1341 can read, change and delete
+# any file on the server, e.g. /etc/shadow or /etc/sudoers, which amounts to
+# root access. Keep the port away from untrusted networks.
 name: just-files
 services:
   just-files:
@@ -11,10 +16,7 @@ services:
       # Web UI on http://<server>:1341, next to just-dlna's 1340.
       - "1341:8080"
     environment:
-      # just-files runs as this user and group. /DATA is owned by root and
-      # filled by apps running as root, so run as root too: the web UI can
-      # then upload, rename and delete anything there. The web UI has no
-      # login, so anyone on the network can do the same.
+      # just-files runs as this user and group: root, to reach every file.
       PUID: "0"
       PGID: "0"
       TZ: Europe/Prague
@@ -22,11 +24,17 @@ services:
       # outside the web UI.
       SCAN_INTERVAL: 10m
     volumes:
-      # The folder shown in the web UI. Add `read_only: true` under this
-      # entry to only browse and download.
+      # The folder shown in the web UI: the server's whole filesystem. Add
+      # `read_only: true` under this entry to only browse and download.
       - type: bind
-        source: /DATA
+        source: /
         target: /data
+      # Settings changed in the web UI. Created by Docker if missing.
+      - type: bind
+        source: /DATA/AppData/just-files/config
+        target: /config
+        bind:
+          create_host_path: true
       # The host's users and groups, so the Owner and Group columns show
       # names instead of numbers.
       - type: bind
@@ -41,7 +49,7 @@ services:
       envs:
         - container: PUID
           description:
-            en_us: User ID just-files runs as (0 = root, owner of /DATA)
+            en_us: User ID just-files runs as (0 = root, to reach every file)
         - container: PGID
           description:
             en_us: Group ID just-files runs as
@@ -54,7 +62,10 @@ services:
       volumes:
         - container: /data
           description:
-            en_us: Folder browsed, searched and managed in the web UI
+            en_us: Folder browsed, searched and managed in the web UI (the whole server filesystem)
+        - container: /config
+          description:
+            en_us: Settings saved by the web UI
         - container: /etc/passwd
           description:
             en_us: Host users, for the Owner column (read-only)

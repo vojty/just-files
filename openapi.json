@@ -242,6 +242,19 @@
         ],
         "type": "object"
       },
+      "Settings": {
+        "additionalProperties": false,
+        "properties": {
+          "showHidden": {
+            "description": "List hidden files and folders (names starting with a dot), and allow opening, creating and changing them.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "showHidden"
+        ],
+        "type": "object"
+      },
       "Uploaded": {
         "additionalProperties": false,
         "properties": {
@@ -956,6 +969,77 @@
         "summary": "Search files and folders by name",
         "tags": [
           "files"
+        ]
+      }
+    },
+    "/api/settings": {
+      "get": {
+        "operationId": "getSettings",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Settings"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Get the settings",
+        "tags": [
+          "server"
+        ]
+      },
+      "put": {
+        "description": "The settings apply at once.",
+        "operationId": "saveSettings",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Settings"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Settings"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Change and save the settings",
+        "tags": [
+          "server"
         ]
       }
     }

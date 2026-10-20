@@ -122,6 +122,13 @@ export type SearchResults = {
   total: number;
 };
 
+export type Settings = {
+  /**
+   * List hidden files and folders (names starting with a dot), and allow opening, creating and changing them.
+   */
+  showHidden: boolean;
+};
+
 export type Uploaded = {
   files: Array<FileEntry>;
 };
@@ -499,3 +506,53 @@ export type SearchResponses = {
 };
 
 export type SearchResponse = SearchResponses[keyof SearchResponses];
+
+export type GetSettingsData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: '/api/settings';
+};
+
+export type GetSettingsErrors = {
+  /**
+   * Error
+   */
+  default: ErrorModel;
+};
+
+export type GetSettingsError = GetSettingsErrors[keyof GetSettingsErrors];
+
+export type GetSettingsResponses = {
+  /**
+   * OK
+   */
+  200: Settings;
+};
+
+export type GetSettingsResponse = GetSettingsResponses[keyof GetSettingsResponses];
+
+export type SaveSettingsData = {
+  body: Settings;
+  path?: never;
+  query?: never;
+  url: '/api/settings';
+};
+
+export type SaveSettingsErrors = {
+  /**
+   * Error
+   */
+  default: ErrorModel;
+};
+
+export type SaveSettingsError = SaveSettingsErrors[keyof SaveSettingsErrors];
+
+export type SaveSettingsResponses = {
+  /**
+   * OK
+   */
+  200: Settings;
+};
+
+export type SaveSettingsResponse = SaveSettingsResponses[keyof SaveSettingsResponses];

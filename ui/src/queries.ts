@@ -1,7 +1,7 @@
 // TanStack Query options for the API. Route loaders prefetch with them
-// (queryClient.ensureQueryData) and components read with useSuspenseQuery.
+// (queryClient.ensureQueryData) and components read them with useQuery.
 import { QueryClient, queryOptions } from "@tanstack/react-query";
-import { api } from "./api.ts";
+import { api, isClientError } from "./api.ts";
 import { highlight } from "./highlight.ts";
 
 export const queryClient = new QueryClient({
@@ -9,6 +9,9 @@ export const queryClient = new QueryClient({
     queries: {
       // Loaders have just fetched the data; don't fetch it again on mount.
       staleTime: 10_000,
+      // Retrying cannot fix a missing permission or file, and would delay
+      // showing the error by seconds.
+      retry: (failures, err) => !isClientError(err) && failures < 3,
     },
   },
 });
@@ -30,6 +33,11 @@ export const queries = {
       queryFn: () => import("virtual:file-icons").then((m) => m.default),
       staleTime: Infinity,
     }),
+  settings: () =>
+    queryOptions({
+      queryKey: ["settings"],
+      queryFn: () => api.settings(),
+    }),
   info: () =>
     queryOptions({
       queryKey: ["info"],
@@ -50,6 +58,12 @@ export const queries = {
       queryKey: ["highlight", path, modTime],
       queryFn: () => highlight(path, text),
       staleTime: Infinity,
+    }),
+  /** Whether a file can be read, to explain why a viewer could not show it. */
+  readable: (path: string) =>
+    queryOptions({
+      queryKey: ["readable", path],
+      queryFn: () => api.checkDownload(path).then(() => true),
     }),
   /** Search below the folder path; invalidate ["search"] after changes. */
   search: (path: string, q: string) =>

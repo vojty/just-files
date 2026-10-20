@@ -52,13 +52,19 @@ type Server struct {
 	root     *os.Root
 	rootPath string // absolute path of the root folder
 	index    *index.Index
+	settings *settingsStore
 	started  time.Time
 }
 
-// New returns a server managing the files under dir. Run the returned
-// server's Index to fill the search index.
-func New(dir, uiDir string, logger *slog.Logger) (*Server, error) {
+// New returns a server managing the files under dir, with the settings
+// saved in settingsFile. Run the returned server's Index to fill the search
+// index.
+func New(dir, uiDir, settingsFile string, logger *slog.Logger) (*Server, error) {
 	abs, err := filepath.Abs(dir)
+	if err != nil {
+		return nil, err
+	}
+	settings, err := loadSettings(settingsFile)
 	if err != nil {
 		return nil, err
 	}
@@ -66,14 +72,16 @@ func New(dir, uiDir string, logger *slog.Logger) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Server{
+	s := &Server{
 		UIDir:    uiDir,
 		Logger:   logger,
 		root:     root,
 		rootPath: abs,
-		index:    index.New(root.FS(), logger.With("component", "index")),
+		settings: settings,
 		started:  time.Now(),
-	}, nil
+	}
+	s.index = index.New(root.FS(), func() bool { return settings.get().ShowHidden }, logger.With("component", "index"))
+	return s, nil
 }
 
 // Close releases the root folder handle.
@@ -140,6 +148,7 @@ func (s *Server) register(api huma.API) {
 	}, s.info)
 	s.registerFiles(api)
 	s.registerSearch(api)
+	s.registerSettings(api)
 }
 
 func (s *Server) info(ctx context.Context, _ *struct{}) (*response[Info], error) {
@@ -196,6 +205,9 @@ func (s *Server) fail(ctx context.Context, err error) error {
 	switch {
 	case errors.As(err, &he):
 		status = he.Status
+	case errors.Is(err, fs.ErrPermission):
+		// The server's user may not read or change the file, e.g. /root.
+		status = http.StatusForbidden
 	case errors.Is(err, fs.ErrNotExist):
 		status = http.StatusNotFound
 	case errors.Is(err, fs.ErrExist):

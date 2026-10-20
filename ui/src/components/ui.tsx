@@ -5,6 +5,7 @@ import { Dialog } from "@base-ui/react/dialog";
 import { Field } from "@base-ui/react/field";
 import { Input } from "@base-ui/react/input";
 import { Menu } from "@base-ui/react/menu";
+import { Switch as BaseSwitch } from "@base-ui/react/switch";
 import { Toast } from "@base-ui/react/toast";
 import type { ComponentProps, ReactNode } from "react";
 import { errorText } from "../api.ts";
@@ -79,6 +80,21 @@ export function TextField({
         {error}
       </Field.Error>
     </Field.Root>
+  );
+}
+
+/** An on/off switch. */
+export function Switch(props: Omit<ComponentProps<typeof BaseSwitch.Root>, "className">) {
+  return (
+    <BaseSwitch.Root
+      className={cx(
+        "relative inline-flex h-6 w-10 shrink-0 items-center rounded-full bg-neutral-300 p-0.5 transition-colors data-checked:bg-indigo-600 data-disabled:opacity-60 dark:bg-neutral-700",
+        focusRing,
+      )}
+      {...props}
+    >
+      <BaseSwitch.Thumb className="size-5 rounded-full bg-white shadow transition-transform data-checked:translate-x-4" />
+    </BaseSwitch.Root>
   );
 }
 
@@ -305,6 +321,9 @@ const iconPaths = {
   close: "M6 6l12 12M18 6 6 18",
   chevron: "m9 6 6 6-6 6",
   home: "M3 11 12 4l9 7v9a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z",
+  lock: "M7 11V8a5 5 0 0 1 10 0v3M5 11h14v10H5z",
+  settings:
+    "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zm7.4 0a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z",
   folderPlus:
     "M3 6a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM12 10v6M9 13h6",
   folderOpen: "M3 6a2 2 0 0 1 2-2h4l2 2h7a2 2 0 0 1 2 2v1M3 6v12a2 2 0 0 0 2 2h12l4-9H7l-4 9",

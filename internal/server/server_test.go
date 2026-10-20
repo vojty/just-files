@@ -21,7 +21,7 @@ func newTestServer(t *testing.T) (*httptest.Server, string, *Server) {
 	if err := os.WriteFile(filepath.Join(ui, "index.html"), []byte("<html>app</html>"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	s, err := New(media, ui, slog.New(slog.DiscardHandler))
+	s, err := New(media, ui, filepath.Join(t.TempDir(), "settings.json"), slog.New(slog.DiscardHandler))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -304,5 +304,87 @@ func TestKind(t *testing.T) {
 		if got := kind(name, false); got != want {
 			t.Errorf("kind(%q) = %q, want %q", name, got, want)
 		}
+	}
+}
+
+func TestPermissionDenied(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root may read everything")
+	}
+	ts, media, _ := newTestServer(t)
+	locked := filepath.Join(media, "locked")
+	os.Mkdir(locked, 0o755)
+	os.WriteFile(filepath.Join(locked, "secret.txt"), []byte("x"), 0o644)
+	os.WriteFile(filepath.Join(media, "unreadable.txt"), []byte("x"), 0o000)
+	os.Chmod(locked, 0o000)
+	t.Cleanup(func() { os.Chmod(locked, 0o755) })
+
+	for _, tt := range []struct{ method, url string }{
+		{"GET", "/api/files?path=locked"},
+		{"GET", "/api/files/content?path=unreadable.txt"},
+		{"HEAD", "/api/files/download?path=unreadable.txt"},
+		{"DELETE", "/api/files?path=locked/secret.txt"},
+	} {
+		if code, body := do(t, tt.method, ts.URL+tt.url, ""); code != 403 {
+			t.Errorf("%s %s: %d %s, want 403", tt.method, tt.url, code, body)
+		}
+	}
+	if code := upload(t, ts.URL+"/api/files/upload?path=locked", "a.txt", "x"); code != 403 {
+		t.Errorf("upload into locked: %d, want 403", code)
+	}
+}
+
+func TestShowHidden(t *testing.T) {
+	media, ui := t.TempDir(), t.TempDir()
+	settingsFile := filepath.Join(t.TempDir(), "conf", "settings.json")
+	os.WriteFile(filepath.Join(media, ".env"), []byte("SECRET=1"), 0o644)
+	os.Mkdir(filepath.Join(media, ".config"), 0o755)
+	start := func() (*httptest.Server, *Server) {
+		t.Helper()
+		s, err := New(media, ui, settingsFile, slog.New(slog.DiscardHandler))
+		if err != nil {
+			t.Fatal(err)
+		}
+		ts := httptest.NewServer(s.Handler())
+		t.Cleanup(func() { ts.Close(); s.Close() })
+		return ts, s
+	}
+	names := func(ts *httptest.Server) string {
+		t.Helper()
+		_, body := do(t, "GET", ts.URL+"/api/files", "")
+		var l Listing
+		json.Unmarshal([]byte(body), &l)
+		var n []string
+		for _, e := range l.Entries {
+			n = append(n, e.Name)
+		}
+		return strings.Join(n, ",")
+	}
+
+	ts, _ := start()
+	if got := names(ts); got != "" {
+		t.Errorf("hidden by default, listed %q", got)
+	}
+	if code, _ := do(t, "GET", ts.URL+"/api/files/content?path=.env", ""); code != 400 {
+		t.Errorf("hidden content: %d, want 400", code)
+	}
+
+	if code, body := do(t, "PUT", ts.URL+"/api/settings", `{"showHidden":true}`); code != 200 || !strings.Contains(body, `"showHidden":true`) {
+		t.Fatalf("save settings: %d %s", code, body)
+	}
+	if got := names(ts); got != ".config,.env" {
+		t.Errorf("shown: listed %q", got)
+	}
+	if code, body := do(t, "GET", ts.URL+"/api/files/content?path=.env", ""); code != 200 || body != "SECRET=1" {
+		t.Errorf("shown content: %d %q", code, body)
+	}
+	if code := upload(t, ts.URL+"/api/files/upload?path=.config", ".gitignore", "x"); code != 201 {
+		t.Errorf("upload a dot file into a dot folder: %d", code)
+	}
+
+	// Saved: a new server starts with them shown.
+	ts2, _ := start()
+	if code, body := do(t, "GET", ts2.URL+"/api/settings", ""); !strings.Contains(body, `"showHidden":true`) {
+		t.Errorf("settings after restart: %d %s", code, body)
 	}
 }

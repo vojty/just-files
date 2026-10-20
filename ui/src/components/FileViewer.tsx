@@ -4,7 +4,14 @@
 import { Dialog } from "@base-ui/react/dialog";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState, type KeyboardEvent, type ReactNode } from "react";
-import { api, errorText, formatSize, parentPath, type FileEntry } from "../api.ts";
+import {
+  api,
+  describeError,
+  formatSize,
+  isClientError,
+  parentPath,
+  type FileEntry,
+} from "../api.ts";
 import { queries, TEXT_PREVIEW_LIMIT } from "../queries.ts";
 import { useView } from "../view.ts";
 import { FileIcon } from "./FileIcon.tsx";
@@ -127,7 +134,7 @@ export function FileViewer({ entry: first, onClose }: { entry: FileEntry; onClos
 function Preview({ entry, viewer, wrap }: { entry: FileEntry; viewer: Viewer; wrap: boolean }) {
   const [failed, setFailed] = useState(false);
   const src = api.contentUrl(entry.path);
-  if (failed) return <NoPreview entry={entry}>The browser cannot show this file.</NoPreview>;
+  if (failed) return <MediaError entry={entry} />;
 
   const media = "max-h-full max-w-full";
   switch (viewer) {
@@ -183,7 +190,13 @@ function TextPreview({ entry, wrap }: { entry: FileEntry; wrap: boolean }) {
     enabled: typeof text === "string",
   });
   const wrapClass = wrap ? "break-words whitespace-pre-wrap" : "whitespace-pre";
-  if (error) return <NoPreview entry={entry}>{errorText(error)}</NoPreview>;
+  if (error) {
+    return (
+      <NoPreview entry={entry} download={!isClientError(error)}>
+        {describeError(error, "this file")}
+      </NoPreview>
+    );
+  }
   if (!data) return <Centered>Loading…</Centered>;
   if (data.text === null) {
     return <NoPreview entry={entry}>There is no preview for this kind of file.</NoPreview>;
@@ -227,16 +240,41 @@ function Centered({ children }: { children: ReactNode }) {
   );
 }
 
-function NoPreview({ entry, children }: { entry: FileEntry; children: ReactNode }) {
+/** Why an image, video or audio file could not be shown: the file, or the browser. */
+function MediaError({ entry }: { entry: FileEntry }) {
+  const { error, isPending } = useQuery(queries.readable(entry.path));
+  if (isPending) return <Centered>Loading…</Centered>;
+  if (error) {
+    return (
+      <NoPreview entry={entry} download={false}>
+        {describeError(error, "this file")}
+      </NoPreview>
+    );
+  }
+  return <NoPreview entry={entry}>The browser cannot show this file.</NoPreview>;
+}
+
+function NoPreview({
+  entry,
+  download = true,
+  children,
+}: {
+  entry: FileEntry;
+  /** Offer to download the file, pointless when it cannot be read. */
+  download?: boolean;
+  children: ReactNode;
+}) {
   return (
     <Centered>
       <div className="flex flex-col items-center gap-3 text-center">
         <Icon name="file" className="size-10 text-neutral-300 dark:text-neutral-600" />
         <p>{children}</p>
-        <a href={api.downloadUrl(entry.path)} className={buttonClass("secondary")}>
-          <Icon name="download" />
-          Download
-        </a>
+        {download && (
+          <a href={api.downloadUrl(entry.path)} className={buttonClass("secondary")}>
+            <Icon name="download" />
+            Download
+          </a>
+        )}
       </div>
     </Centered>
   );

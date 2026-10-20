@@ -42,8 +42,9 @@ type Status struct {
 
 // Index is a searchable snapshot of the root.
 type Index struct {
-	fsys   fs.FS
-	logger *slog.Logger
+	fsys       fs.FS
+	showHidden func() bool
+	logger     *slog.Logger
 
 	refresh chan struct{}
 
@@ -53,9 +54,11 @@ type Index struct {
 	scanning bool
 }
 
-// New returns an empty index of fsys; call Run to fill it.
-func New(fsys fs.FS, logger *slog.Logger) *Index {
-	return &Index{fsys: fsys, logger: logger, refresh: make(chan struct{}, 1)}
+// New returns an empty index of fsys; call Run to fill it. Hidden (dot)
+// files and folders are indexed while showHidden reports true; call Refresh
+// when that changes.
+func New(fsys fs.FS, showHidden func() bool, logger *slog.Logger) *Index {
+	return &Index{fsys: fsys, showHidden: showHidden, logger: logger, refresh: make(chan struct{}, 1)}
 }
 
 // refreshDelay batches the rescans requested by bursts of changes, such as
@@ -101,13 +104,14 @@ func (ix *Index) Refresh() {
 }
 
 // Scan walks the root and replaces the entries. Hidden (dot) files and
-// folders are skipped, as are folders that cannot be read.
+// folders are skipped unless shown, as are folders that cannot be read.
 func (ix *Index) Scan(ctx context.Context) {
 	ix.mu.Lock()
 	ix.scanning = true
 	ix.mu.Unlock()
 
 	start := time.Now()
+	showHidden := ix.showHidden()
 	var entries []Entry
 	err := fs.WalkDir(ix.fsys, ".", func(p string, d fs.DirEntry, err error) error {
 		if ctx.Err() != nil {
@@ -116,7 +120,7 @@ func (ix *Index) Scan(ctx context.Context) {
 		if p == "." {
 			return err
 		}
-		if strings.HasPrefix(d.Name(), ".") {
+		if !showHidden && strings.HasPrefix(d.Name(), ".") {
 			if d.IsDir() {
 				return fs.SkipDir
 			}

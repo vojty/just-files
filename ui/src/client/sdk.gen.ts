@@ -2,7 +2,7 @@
 
 import { type Client, type ClientMeta, formDataBodySerializer, type Options as Options2, type RequestResult, type TDataShape } from './client';
 import { client } from './client.gen';
-import type { CreateFolderData, CreateFolderErrors, CreateFolderResponses, DeleteFileData, DeleteFileErrors, DeleteFileResponses, DownloadFileData, DownloadFileErrors, DownloadFileResponses, GetFileContentData, GetFileContentErrors, GetFileContentResponses, GetInfoData, GetInfoErrors, GetInfoResponses, ListFilesData, ListFilesErrors, ListFilesResponses, MoveFileData, MoveFileErrors, MoveFileResponses, SearchData, SearchErrors, SearchResponses, UploadFilesData, UploadFilesErrors, UploadFilesResponses } from './types.gen';
+import type { CreateFolderData, CreateFolderErrors, CreateFolderResponses, DeleteFileData, DeleteFileErrors, DeleteFileResponses, DownloadFileData, DownloadFileErrors, DownloadFileResponses, GetFileContentData, GetFileContentErrors, GetFileContentResponses, GetInfoData, GetInfoErrors, GetInfoResponses, GetSettingsData, GetSettingsErrors, GetSettingsResponses, ListFilesData, ListFilesErrors, ListFilesResponses, MoveFileData, MoveFileErrors, MoveFileResponses, SaveSettingsData, SaveSettingsErrors, SaveSettingsResponses, SearchData, SearchErrors, SearchResponses, UploadFilesData, UploadFilesErrors, UploadFilesResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
   /**
@@ -90,3 +90,22 @@ export const getInfo = <ThrowOnError extends boolean = false>(options?: Options<
  * Searches an in-memory index of the root folder, which is refreshed periodically and after changes made through the API.
  */
 export const search = <ThrowOnError extends boolean = false>(options?: Options<SearchData, ThrowOnError>): RequestResult<SearchResponses, SearchErrors, ThrowOnError> => (options?.client ?? client).get<SearchResponses, SearchErrors, ThrowOnError>({ url: '/api/search', ...options });
+
+/**
+ * Get the settings
+ */
+export const getSettings = <ThrowOnError extends boolean = false>(options?: Options<GetSettingsData, ThrowOnError>): RequestResult<GetSettingsResponses, GetSettingsErrors, ThrowOnError> => (options?.client ?? client).get<GetSettingsResponses, GetSettingsErrors, ThrowOnError>({ url: '/api/settings', ...options });
+
+/**
+ * Change and save the settings
+ *
+ * The settings apply at once.
+ */
+export const saveSettings = <ThrowOnError extends boolean = false>(options: Options<SaveSettingsData, ThrowOnError>): RequestResult<SaveSettingsResponses, SaveSettingsErrors, ThrowOnError> => (options.client ?? client).put<SaveSettingsResponses, SaveSettingsErrors, ThrowOnError>({
+  url: '/api/settings',
+  ...options,
+  headers: {
+    'Content-Type': 'application/json',
+    ...options.headers
+  }
+});

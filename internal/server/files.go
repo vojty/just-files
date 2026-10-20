@@ -190,9 +190,10 @@ func kind(name string, isDir bool) string {
 }
 
 // cleanPath normalises a client-supplied relative path and rejects anything
-// that would escape the root or reach a hidden (dot) file or folder, which
-// are never listed. os.Root additionally rejects escapes via symlinks.
-func cleanPath(p string) (string, error) {
+// that would escape the root or, unless the settings show them, reach a
+// hidden (dot) file or folder. os.Root additionally rejects escapes via
+// symlinks.
+func (s *Server) cleanPath(p string) (string, error) {
 	p = path.Clean("/" + strings.TrimPrefix(p, "./"))
 	p = strings.TrimPrefix(p, "/")
 	if p == "" {
@@ -202,7 +203,7 @@ func cleanPath(p string) (string, error) {
 		return "", Invalid(fmt.Errorf("invalid path %q", p))
 	}
 	for part := range strings.SplitSeq(p, "/") {
-		if strings.HasPrefix(part, ".") {
+		if s.hidden(part) {
 			return "", Invalid(fmt.Errorf("invalid path %q: hidden files are not accessible", p))
 		}
 	}
@@ -210,14 +211,14 @@ func cleanPath(p string) (string, error) {
 }
 
 // validName checks a single file or folder name chosen by the client.
-func validName(name string) error {
+func (s *Server) validName(name string) error {
 	switch {
 	case name == "", name == ".", name == "..":
 		return Invalid(fmt.Errorf("invalid name %q", name))
 	case strings.ContainsAny(name, `/\`):
 		return Invalid(fmt.Errorf("name %q must not contain slashes", name))
-	case strings.HasPrefix(name, "."):
-		return Invalid(fmt.Errorf("name %q must not start with a dot", name))
+	case s.hidden(name):
+		return Invalid(fmt.Errorf("name %q must not start with a dot while hidden files are not shown", name))
 	}
 	return nil
 }
@@ -238,7 +239,7 @@ func newEntry(rel string, fi fs.FileInfo) FileEntry {
 }
 
 func (s *Server) listFiles(ctx context.Context, in *pathParam) (*response[Listing], error) {
-	dir, err := cleanPath(in.Path)
+	dir, err := s.cleanPath(in.Path)
 	if err != nil {
 		return nil, s.fail(ctx, err)
 	}
@@ -248,7 +249,7 @@ func (s *Server) listFiles(ctx context.Context, in *pathParam) (*response[Listin
 	}
 	entries := []FileEntry{}
 	for _, de := range des {
-		if strings.HasPrefix(de.Name(), ".") {
+		if s.hidden(de.Name()) {
 			continue
 		}
 		rel := path.Join(dir, de.Name())
@@ -302,7 +303,7 @@ func (in *uploadInput) Resolve(ctx huma.Context) []error {
 // path query parameter. Each file is written to a hidden temporary file first
 // and renamed when complete, so clients never see partial uploads.
 func (s *Server) upload(ctx context.Context, in *uploadInput) (*response[Uploaded], error) {
-	dir, err := cleanPath(in.Path)
+	dir, err := s.cleanPath(in.Path)
 	if err != nil {
 		return nil, s.fail(ctx, err)
 	}
@@ -349,7 +350,7 @@ func (s *Server) upload(ctx context.Context, in *uploadInput) (*response[Uploade
 
 func (s *Server) saveUpload(dir, name string, src io.Reader, overwrite bool) (FileEntry, error) {
 	// Browsers send only the base name, but be strict about anything else.
-	if err := validName(name); err != nil {
+	if err := s.validName(name); err != nil {
 		return FileEntry{}, err
 	}
 	rel := path.Join(dir, name)
@@ -380,12 +381,12 @@ func (s *Server) saveUpload(dir, name string, src io.Reader, overwrite bool) (Fi
 }
 
 func (s *Server) mkdir(ctx context.Context, in *struct{ Body MkdirRequest }) (*response[FileEntry], error) {
-	rel, err := cleanPath(in.Body.Path)
+	rel, err := s.cleanPath(in.Body.Path)
 	if err == nil && rel == "." {
 		err = Invalid(errors.New("missing folder name"))
 	}
 	if err == nil {
-		err = validName(path.Base(rel))
+		err = s.validName(path.Base(rel))
 	}
 	if err == nil {
 		err = s.root.Mkdir(rel, 0o755)
@@ -404,11 +405,11 @@ func (s *Server) mkdir(ctx context.Context, in *struct{ Body MkdirRequest }) (*r
 
 // move renames or moves a file or folder.
 func (s *Server) move(ctx context.Context, in *struct{ Body MoveRequest }) (*response[FileEntry], error) {
-	from, err := cleanPath(in.Body.From)
+	from, err := s.cleanPath(in.Body.From)
 	if err != nil {
 		return nil, s.fail(ctx, err)
 	}
-	to, err := cleanPath(in.Body.To)
+	to, err := s.cleanPath(in.Body.To)
 	if err != nil {
 		return nil, s.fail(ctx, err)
 	}
@@ -423,7 +424,7 @@ func (s *Server) move(ctx context.Context, in *struct{ Body MoveRequest }) (*res
 		err = Conflict(fmt.Errorf("%q already exists", to))
 	}
 	if err == nil {
-		err = validName(path.Base(to))
+		err = s.validName(path.Base(to))
 	}
 	if err == nil {
 		err = s.requireDir(path.Dir(to))
@@ -444,7 +445,7 @@ func (s *Server) move(ctx context.Context, in *struct{ Body MoveRequest }) (*res
 }
 
 func (s *Server) deleteFile(ctx context.Context, in *pathParam) (*struct{}, error) {
-	rel, err := cleanPath(in.Path)
+	rel, err := s.cleanPath(in.Path)
 	if err == nil && rel == "." {
 		err = Invalid(errors.New("the root folder itself cannot be deleted"))
 	}
@@ -465,7 +466,7 @@ func (s *Server) deleteFile(ctx context.Context, in *pathParam) (*struct{}, erro
 // openFile opens the file at the client-supplied path p, which must not be
 // a folder.
 func (s *Server) openFile(p string) (*os.File, fs.FileInfo, error) {
-	rel, err := cleanPath(p)
+	rel, err := s.cleanPath(p)
 	if err != nil {
 		return nil, nil, err
 	}

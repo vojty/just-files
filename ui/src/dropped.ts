@@ -6,7 +6,10 @@ export interface UploadItem {
   dir: string;
 }
 
-/** The server rejects dot files, such as .DS_Store, so they are left out. */
+/**
+ * Dot files, such as .DS_Store, are left out unless the server shows hidden
+ * files: it rejects them otherwise.
+ */
 const hidden = (name: string) => name.startsWith(".");
 
 const join = (dir: string, name: string) => (dir ? `${dir}/${name}` : name);
@@ -16,29 +19,34 @@ const join = (dir: string, name: string) => (dir ? `${dir}/${name}` : name);
  * drop event: browsers empty the DataTransfer afterwards. Reading folders
  * continues asynchronously.
  */
-export function droppedFiles(dt: DataTransfer): Promise<UploadItem[]> {
+export function droppedFiles(dt: DataTransfer, includeHidden = false): Promise<UploadItem[]> {
   const entries = Array.from(dt.items, (item) =>
     item.kind === "file" ? item.webkitGetAsEntry() : null,
   ).filter((e) => e !== null);
   if (entries.length === 0) {
     // No entry API: plain files only.
-    return Promise.resolve(fromFiles(Array.from(dt.files)));
+    return Promise.resolve(fromFiles(Array.from(dt.files), includeHidden));
   }
   return (async () => {
     const out: UploadItem[] = [];
-    for (const entry of entries) await walk(entry, "", out);
+    for (const entry of entries) await walk(entry, "", out, includeHidden);
     return out;
   })();
 }
 
-async function walk(entry: FileSystemEntry, dir: string, out: UploadItem[]) {
-  if (hidden(entry.name)) return;
+async function walk(
+  entry: FileSystemEntry,
+  dir: string,
+  out: UploadItem[],
+  includeHidden: boolean,
+) {
+  if (!includeHidden && hidden(entry.name)) return;
   if (isFile(entry)) {
     const file = await new Promise<File>((resolve, reject) => entry.file(resolve, reject));
     out.push({ file, dir });
   } else if (isDirectory(entry)) {
     const sub = join(dir, entry.name);
-    for (const child of await readAll(entry)) await walk(child, sub, out);
+    for (const child of await readAll(entry)) await walk(child, sub, out, includeHidden);
   }
 }
 
@@ -62,11 +70,11 @@ const isDirectory = (e: FileSystemEntry): e is FileSystemDirectoryEntry => e.isD
  * Returns the files picked with a file input. Files picked as a folder
  * (webkitdirectory) keep their place within it.
  */
-export function fromFiles(files: Iterable<File>): UploadItem[] {
+export function fromFiles(files: Iterable<File>, includeHidden = false): UploadItem[] {
   const out: UploadItem[] = [];
   for (const file of files) {
     const parts = (file.webkitRelativePath || file.name).split("/");
-    if (parts.some(hidden)) continue;
+    if (!includeHidden && parts.some(hidden)) continue;
     out.push({ file, dir: parts.slice(0, -1).join("/") });
   }
   return out;

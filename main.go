@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
@@ -24,6 +25,7 @@ import (
 
 type config struct {
 	rootPath     string
+	configFile   string
 	port         int
 	uiDir        string
 	scanInterval time.Duration
@@ -62,6 +64,11 @@ func envDuration(key string, def time.Duration) time.Duration {
 func parseConfig() config {
 	var c config
 	flag.StringVar(&c.rootPath, "path", env("ROOT_PATH", "."), "folder to serve [ROOT_PATH]")
+	defaultConfig := "just-files-settings.json"
+	if d, err := os.UserConfigDir(); err == nil {
+		defaultConfig = filepath.Join(d, "just-files", "settings.json")
+	}
+	flag.StringVar(&c.configFile, "config", env("CONFIG_FILE", defaultConfig), "settings file, written when settings are changed in the web UI [CONFIG_FILE]")
 	flag.IntVar(&c.port, "port", envInt("PORT", 8080), "web UI port [PORT]")
 	flag.StringVar(&c.uiDir, "ui-dir", env("UI_DIR", "ui/dist"), "folder with the built web UI [UI_DIR]")
 	flag.DurationVar(&c.scanInterval, "scan-interval", envDuration("SCAN_INTERVAL", 10*time.Minute), "how often to rescan the folder for search, 0 disables; changes made in the UI trigger a rescan anyway [SCAN_INTERVAL]")
@@ -123,7 +130,7 @@ func main() {
 }
 
 func run(c config, logger *slog.Logger) error {
-	srv, err := server.New(c.rootPath, c.uiDir, logger.With("component", "server"))
+	srv, err := server.New(c.rootPath, c.uiDir, c.configFile, logger.With("component", "server"))
 	if err != nil {
 		return err
 	}
@@ -145,7 +152,7 @@ func run(c config, logger *slog.Logger) error {
 
 	go srv.Index().Run(ctx, c.scanInterval)
 
-	logger.Info("starting", "path", c.rootPath, "port", c.port, "scan_interval", c.scanInterval)
+	logger.Info("starting", "path", c.rootPath, "port", c.port, "config", c.configFile, "scan_interval", c.scanInterval)
 
 	errc := make(chan error, 1)
 	go func() {

@@ -7,10 +7,11 @@ import type {
   ErrorModel,
   FileEntry,
   GetFileContentData,
+  Settings,
   UploadFilesData,
 } from "./client/index.ts";
 
-export type { FileEntry, SearchResults } from "./client/index.ts";
+export type { FileEntry, SearchResults, Settings } from "./client/index.ts";
 export type FileKind = FileEntry["kind"];
 
 export class ApiError extends Error {
@@ -58,6 +59,8 @@ const query = (params: Record<string, string | boolean | undefined>) => {
 
 export const api = {
   info: () => call(sdk.getInfo()),
+  settings: () => call(sdk.getSettings()),
+  saveSettings: (settings: Settings) => call(sdk.saveSettings({ body: settings })),
   search: (path: string, q: string) => call(sdk.search({ query: { path, q } })),
   list: (path: string) => call(sdk.listFiles({ query: { path } })),
   mkdir: (path: string) => call(sdk.createFolder({ body: { path } })),
@@ -65,6 +68,19 @@ export const api = {
   remove: (path: string) => call(sdk.deleteFile({ query: { path } })).then(() => undefined),
   downloadUrl: (path: string) =>
     `/api/files/download?${query({ path } satisfies DownloadFileData["query"])}`,
+  /**
+   * Throws an ApiError when the file cannot be downloaded, before navigating
+   * to downloadUrl, which on failure would replace the page with the error.
+   */
+  checkDownload: async (path: string) => {
+    let response: Response;
+    try {
+      response = await fetch(api.downloadUrl(path), { method: "HEAD" });
+    } catch {
+      throw new ApiError(0, "Cannot reach the server");
+    }
+    if (!response.ok) throw new ApiError(response.status, response.statusText);
+  },
   /** URL showing the file in the browser; see the API on what it is safe for. */
   contentUrl: (path: string) =>
     `/api/files/content?${query({ path } satisfies GetFileContentData["query"])}`,
@@ -150,6 +166,29 @@ export function parentPath(path: string): string {
 
 export function errorText(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
+}
+
+/**
+ * A message for a failed request about subject, e.g. "this folder": a plain
+ * sentence for the common statuses, the server's message otherwise.
+ */
+export function describeError(err: unknown, subject: string): string {
+  if (err instanceof ApiError) {
+    switch (err.status) {
+      case 403:
+        return `You don't have permission to open ${subject}.`;
+      case 404:
+        return `${subject[0].toUpperCase()}${subject.slice(1)} doesn't exist anymore.`;
+      case 0:
+        return "Cannot reach the server.";
+    }
+  }
+  return errorText(err);
+}
+
+/** Whether a request failed for a reason that trying again does not fix. */
+export function isClientError(err: unknown): boolean {
+  return err instanceof ApiError && err.status >= 400 && err.status < 500;
 }
 
 export function formatSize(bytes: number): string {

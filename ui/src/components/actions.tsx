@@ -3,7 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useState, type FormEvent } from "react";
-import { api, errorText, joinPath, parentPath, type FileEntry } from "../api.ts";
+import { ApiError, api, describeError, joinPath, parentPath, type FileEntry } from "../api.ts";
 import { queries } from "../queries.ts";
 import { FileViewer } from "./FileViewer.tsx";
 import {
@@ -26,6 +26,11 @@ export type Action =
   | { kind: "view" | "rename" | "move" | "delete"; entry: FileEntry };
 
 export type OnAction = (a: Action) => void;
+
+/** Reports a failed change, saying so plainly when permission was missing. */
+function failed(err: Error) {
+  notifyError(err, err instanceof ApiError && err.status === 403 ? "Permission denied" : undefined);
+}
 
 /**
  * The changes to files and folders. Each refreshes every listing and search
@@ -63,7 +68,7 @@ export function useFileMutations(current: string) {
     mkdir: useMutation({
       mutationFn: api.mkdir,
       onSuccess: refresh,
-      onError: (err) => notifyError(err),
+      onError: failed,
     }),
     move: useMutation({
       mutationFn: ({ from, to }: { from: string; to: string }) => api.move(from, to),
@@ -72,7 +77,7 @@ export function useFileMutations(current: string) {
         forget(from);
         await refresh();
       },
-      onError: (err) => notifyError(err),
+      onError: failed,
     }),
     remove: useMutation({
       mutationFn: api.remove,
@@ -81,9 +86,23 @@ export function useFileMutations(current: string) {
         forget(path);
         await refresh();
       },
-      onError: (err) => notifyError(err),
+      onError: failed,
     }),
   };
+}
+
+/**
+ * Downloads the file at path. The server sends it as an attachment, so the
+ * page stays open; a file that cannot be read gets a notification instead of
+ * an error page replacing the app.
+ */
+async function download(path: string) {
+  try {
+    await api.checkDownload(path);
+    window.location.assign(api.downloadUrl(path));
+  } catch (err) {
+    notifyError(err, describeError(err, "this file"));
+  }
 }
 
 /** Menu items for entry, shared by its "⋯" menu and its context menu. */
@@ -106,12 +125,7 @@ export function EntryMenuItems({ entry, onAction }: { entry: FileEntry; onAction
           <MenuItem icon="eye" onClick={() => onAction({ kind: "view", entry })}>
             View
           </MenuItem>
-          <MenuItem
-            icon="download"
-            // The server sends Content-Disposition: attachment, so the page
-            // stays open.
-            onClick={() => window.location.assign(api.downloadUrl(entry.path))}
-          >
+          <MenuItem icon="download" onClick={() => void download(entry.path)}>
             Download
           </MenuItem>
         </>
@@ -284,9 +298,15 @@ function NameDialog({
   onSubmit: (name: string) => void;
 }) {
   const [name, setName] = useState(initial);
+  const showHidden = useQuery(queries.settings()).data?.showHidden ?? false;
 
   const trimmed = name.trim();
-  const invalid = trimmed.includes("/") || trimmed.includes("\\") || trimmed.startsWith(".");
+  const invalid =
+    trimmed.includes("/") ||
+    trimmed.includes("\\") ||
+    trimmed === "." ||
+    trimmed === ".." ||
+    (!showHidden && trimmed.startsWith("."));
 
   function submit(e: FormEvent) {
     e.preventDefault();
@@ -300,7 +320,11 @@ function NameDialog({
         <TextField
           label="Name"
           invalid={invalid}
-          error="Names cannot contain slashes or start with a dot."
+          error={
+            showHidden
+              ? "Names cannot contain slashes."
+              : "Names cannot contain slashes or start with a dot (hidden files are off in Settings)."
+          }
           value={name}
           onValueChange={setName}
           onFocus={(e) => {
@@ -368,7 +392,9 @@ function MoveDialog({
         </div>
         <ul className="h-56 overflow-y-auto p-1">
           {error ? (
-            <li className="px-3 py-2 text-sm text-red-600 dark:text-red-400">{errorText(error)}</li>
+            <li className="px-3 py-2 text-sm text-red-600 dark:text-red-400">
+              {describeError(error, "this folder")}
+            </li>
           ) : !folders ? (
             <li className="px-3 py-2 text-sm text-neutral-500">Loading…</li>
           ) : folders.length === 0 ? (

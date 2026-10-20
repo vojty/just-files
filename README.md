@@ -4,6 +4,15 @@ A small web file browser for one folder: a folder tree beside the current
 folder, search as you type, and drag and drop uploads of files and whole
 folders.
 
+> [!WARNING]
+> **just-files has no authentication.** Anyone who can reach its port can
+> browse, download, upload, rename and delete every file the server process
+> may access, with that process's permissions. Run as root on `/` (as the
+> CasaOS setup in `docker-compose.yaml` does), that is full control of the
+> machine. Run it only on a network where you trust everyone, never expose it
+> to the internet, and for anything else put it behind a reverse proxy that
+> requires a login, or mount the folder read-only.
+
 ## Run
 
 ```sh
@@ -30,26 +39,34 @@ access to the folder for uploads; `PUID=0` runs as root. Nothing in the folder
 is chowned.
 
 For CasaOS, import `docker-compose.yaml` (App Store → Custom Install →
-Import). It serves `/DATA` on port 1341 as root; adjust both there if needed.
+Import). It serves the server's whole filesystem (`/`) on port 1341 as root,
+writable: with no login, anyone who reaches the port can change any file on the
+server. Adjust the folder there, or mark it `read_only: true`, if needed.
 `docker compose up -d` with the same file works without CasaOS.
 
 | Flag | Environment | Default | |
 |---|---|---|---|
 | `-path` | `ROOT_PATH` | `.` | folder to serve |
 | `-port` | `PORT` | `8080` | web UI port |
+| `-config` | `CONFIG_FILE` | `~/.config/just-files/settings.json` | settings file, written by the Settings page |
 | `-ui-dir` | `UI_DIR` | `ui/dist` | folder with the built web UI |
 | `-scan-interval` | `SCAN_INTERVAL` | `10m` | how often to rescan the folder for search, `0` disables |
 | `-log-level` | `LOG_LEVEL` | `info` | `debug`, `info`, `warn` or `error` |
 | `-log-format` | `LOG_FORMAT` | `auto` | `auto`, `pretty`, `text` or `json` |
 
-There is no login: anyone who can reach the port can read, change and delete
-the files. Run it on a trusted network or behind an authenticating proxy.
+The **Settings** page (gear in the header) holds options that apply at once,
+for everyone, and are saved to the settings file:
+
+- **Show hidden files**: dot files and folders such as `.env` or `.ssh` are
+  hidden and unreachable by default, also by direct URL. While shown, they
+  can be found, opened, changed and deleted like any other file.
 
 ## How it works
 
 - **Files** are accessed through Go's `os.Root`, so no request can reach
   outside the folder, also not through `..` or symlinks. Hidden (dot) files
-  are neither listed nor accessible.
+  are neither listed nor accessible, unless shown in Settings. Files the
+  server's user may not read give a clear "no permission" error (403).
 - **Search** filters an in-memory index of every file and folder name
   (`internal/index`), so results come back in milliseconds instead of walking
   the disk per query. The index is rebuilt by a full walk at startup, every

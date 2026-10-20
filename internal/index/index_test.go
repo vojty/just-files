@@ -26,7 +26,7 @@ func TestSearch(t *testing.T) {
 		"Docs/report.pdf":           {},
 		"beach":                     {Mode: fs.ModeDir | 0o755},
 		".hidden/beach.txt":         {},
-	}, slog.New(slog.DiscardHandler))
+	}, func() bool { return false }, slog.New(slog.DiscardHandler))
 	ix.Scan(context.Background())
 
 	tests := []struct {
@@ -53,5 +53,19 @@ func TestSearch(t *testing.T) {
 
 	if s := ix.Status(); s.Entries != 8 || s.ScannedAt.IsZero() || s.Scanning {
 		t.Errorf("status %+v", s)
+	}
+}
+
+func TestShowHidden(t *testing.T) {
+	show := false
+	ix := New(fstest.MapFS{"a.txt": {}, ".git/config": {}, ".env": {}}, func() bool { return show }, slog.New(slog.DiscardHandler))
+	ix.Scan(context.Background())
+	if got, _ := ix.Search(".", "e", 10); len(got) != 0 {
+		t.Errorf("hidden: found %q", paths(got))
+	}
+	show = true
+	ix.Scan(context.Background())
+	if got, _ := ix.Search(".", "g", 10); !slices.Equal(paths(got), []string{".git", ".git/config"}) {
+		t.Errorf("shown: found %q", paths(got))
 	}
 }

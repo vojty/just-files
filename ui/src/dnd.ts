@@ -40,9 +40,12 @@ export interface DragDrop {
 const hasFiles = (dt: DataTransfer) => dt.types.includes("Files");
 
 export function useDragDrop({
+  includeHidden,
   onMove,
   onUpload,
 }: {
+  /** Upload dot files too, when the server shows hidden files. */
+  includeHidden: boolean;
   onMove: (entry: FileEntry, target: string) => void;
   onUpload: (target: string, items: UploadItem[]) => void;
 }): DragDrop {
@@ -61,7 +64,9 @@ export function useDragDrop({
 
   function upload(target: string, dt: DataTransfer) {
     // Read synchronously: the browser empties dt after the event.
-    void droppedFiles(dt).then((items) => items.length > 0 && onUpload(target, items));
+    void droppedFiles(dt, includeHidden).then(
+      (items) => items.length > 0 && onUpload(target, items),
+    );
   }
 
   /** Whether the drag can be dropped into the folder target. */
