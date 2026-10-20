@@ -3,7 +3,14 @@
 // keys step through the other files of the folder in the listing's order.
 import { Dialog } from "@base-ui/react/dialog";
 import { useQuery } from "@tanstack/react-query";
-import { useMemo, useState, type KeyboardEvent, type ReactNode } from "react";
+import {
+  Fragment,
+  useMemo,
+  useState,
+  type CSSProperties,
+  type KeyboardEvent,
+  type ReactNode,
+} from "react";
 import {
   api,
   describeError,
@@ -189,7 +196,6 @@ function TextPreview({ entry, wrap }: { entry: FileEntry; wrap: boolean }) {
     ...queries.highlight(entry.path, entry.modTime, text ?? ""),
     enabled: typeof text === "string",
   });
-  const wrapClass = wrap ? "break-words whitespace-pre-wrap" : "whitespace-pre";
   if (error) {
     return (
       <NoPreview entry={entry} download={!isClientError(error)}>
@@ -201,6 +207,15 @@ function TextPreview({ entry, wrap }: { entry: FileEntry; wrap: boolean }) {
   if (data.text === null) {
     return <NoPreview entry={entry}>There is no preview for this kind of file.</NoPreview>;
   }
+  const lines = data.text.split("\n");
+  // Line numbers come from CSS, see .numbered, so selecting and copying skips them.
+  const codeProps = {
+    className: cx(
+      "numbered min-h-0 flex-1 overflow-auto text-[13px] leading-relaxed [&_pre]:min-h-full [&_pre]:py-4 [&_pre]:pr-4 [&_pre]:font-mono",
+      wrap ? "[&_pre]:break-words [&_pre]:whitespace-pre-wrap" : "[&_pre]:whitespace-pre",
+    ),
+    style: { "--gutter": `${String(lines.length).length + 2}ch` } as CSSProperties,
+  };
   return (
     <div className="flex size-full flex-col">
       {entry.size > TEXT_PREVIEW_LIMIT && (
@@ -210,23 +225,25 @@ function TextPreview({ entry, wrap }: { entry: FileEntry; wrap: boolean }) {
       )}
       {html ? (
         <div
-          className={cx(
-            "min-h-0 flex-1 overflow-auto text-[13px] leading-relaxed [&_pre]:min-h-full [&_pre]:p-4 [&_pre]:font-mono",
-            wrap ? "[&_pre]:break-words [&_pre]:whitespace-pre-wrap" : "[&_pre]:whitespace-pre",
-          )}
+          {...codeProps}
           // Shiki escapes the file's text; the HTML is only its markup.
           // oxlint-disable-next-line react/no-danger
           dangerouslySetInnerHTML={{ __html: html }}
         />
       ) : (
-        <pre
-          className={cx(
-            "min-h-0 flex-1 overflow-auto p-4 font-mono text-[13px] leading-relaxed",
-            wrapClass,
-          )}
-        >
-          {data.text}
-        </pre>
+        <div {...codeProps}>
+          {/* The same markup as Shiki's, one span per line. */}
+          <pre>
+            <code>
+              {lines.map((line, n) => (
+                <Fragment key={n}>
+                  {n > 0 && "\n"}
+                  <span className="line">{line}</span>
+                </Fragment>
+              ))}
+            </code>
+          </pre>
+        </div>
       )}
     </div>
   );

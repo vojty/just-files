@@ -16,3 +16,28 @@
     @apply bg-neutral-50 text-neutral-900 antialiased dark:bg-neutral-950 dark:text-neutral-100;
   }
 }
+
+/* Line numbers in the gutter of a <pre> whose lines are <span class="line">,
+   as Shiki writes them. Generated content is never selected or copied. A
+   wrapped line continues after the gutter. */
+.numbered pre {
+  counter-reset: line;
+  padding-left: calc(var(--gutter) + 1rem);
+}
+.numbered .line::before {
+  counter-increment: line;
+  content: counter(line);
+  display: inline-block;
+  width: var(--gutter);
+  margin-left: calc(-1 * var(--gutter));
+  padding-right: 2ch;
+  box-sizing: border-box;
+  text-align: right;
+  color: var(--color-neutral-400);
+  user-select: none;
+}
+@media (prefers-color-scheme: dark) {
+  .numbered .line::before {
+    color: var(--color-neutral-600);
+  }
+}
