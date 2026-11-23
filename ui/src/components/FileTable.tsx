@@ -38,12 +38,41 @@ const kindColor: Record<FileKind, string> = {
   other: "text-neutral-400",
 };
 
-/** A description of the type, e.g. "JPG image", "Folder". */
+/** A description of the type, e.g. "JPG image", "Folder", "Folder (link)". */
 export function typeLabel(e: FileEntry): string {
+  if (e.broken) return "Broken link";
+  if (e.symlink !== undefined) return `${typeLabel({ ...e, symlink: undefined })} (link)`;
   const kind = e.kind === "other" ? "file" : e.kind;
   const dot = e.name.lastIndexOf(".");
   if (e.isDir || dot <= 0) return kind[0].toUpperCase() + kind.slice(1);
   return `${e.name.slice(dot + 1).toUpperCase()} ${kind}`;
+}
+
+/** The entry's name as ls -l shows it, e.g. "lib → usr/lib" for a symbolic link. */
+export function entryText(e: FileEntry): string {
+  return e.symlink === undefined ? e.name : `${e.name} → ${e.symlink}`;
+}
+
+/** The entry's name, followed by "→ target" for a symbolic link, red when it is broken. */
+export function EntryLabel({ entry, className }: { entry: FileEntry; className?: string }) {
+  return (
+    <span className={cx("truncate", className)}>
+      {entry.name}
+      {entry.symlink !== undefined && (
+        <span
+          className={cx(
+            "font-normal",
+            entry.broken
+              ? "text-red-600 dark:text-red-400"
+              : "text-neutral-500 dark:text-neutral-400",
+          )}
+        >
+          {" → "}
+          {entry.symlink}
+        </span>
+      )}
+    </span>
+  );
 }
 
 type ColumnKey = ColumnId | "folder";
@@ -314,14 +343,24 @@ function EntryName({ entry, onAction }: { entry: FileEntry; onAction: OnAction }
           }
         />
       )}
-      <span className="truncate">{entry.name}</span>
+      <EntryLabel entry={entry} />
     </>
   );
+  const title = entryText(entry);
+  if (entry.broken) {
+    // Nothing to open; the menus still rename or delete the link.
+    return (
+      <span className="flex items-center gap-2.5" title={title}>
+        {content}
+      </span>
+    );
+  }
   return entry.isDir ? (
     <Link
       to="/"
       search={{ path: entry.path }}
       className="flex items-center gap-2.5 font-medium hover:text-indigo-600 dark:hover:text-indigo-400"
+      title={title}
     >
       {content}
     </Link>
@@ -329,7 +368,7 @@ function EntryName({ entry, onAction }: { entry: FileEntry; onAction: OnAction }
     <Button
       variant="plain"
       className="flex max-w-full items-center gap-2.5 rounded text-left hover:text-indigo-600 dark:hover:text-indigo-400"
-      title={entry.name}
+      title={title}
       onClick={() => onAction({ kind: "view", entry })}
     >
       {content}

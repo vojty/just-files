@@ -55,6 +55,10 @@ export type ErrorModel = {
 
 export type FileEntry = {
   /**
+   * The symbolic link's target is missing or outside the root folder; the other fields describe the link itself.
+   */
+  broken?: boolean;
+  /**
    * Group owning the file; empty where the system has no owners.
    */
   group: string;
@@ -75,6 +79,10 @@ export type FileEntry = {
    */
   path: string;
   size: number;
+  /**
+   * Target of a symbolic link, as stored in the link; the other fields describe the target, unless it is broken.
+   */
+  symlink?: string;
 };
 
 export type Info = {

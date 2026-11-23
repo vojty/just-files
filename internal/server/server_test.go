@@ -460,3 +460,70 @@ func TestCreateFile(t *testing.T) {
 		}
 	}
 }
+
+func TestSymlinks(t *testing.T) {
+	ts, media, _ := newTestServer(t)
+	os.WriteFile(filepath.Join(media, "notes.md"), []byte("hello"), 0o644)
+	os.WriteFile(filepath.Join(filepath.Dir(media), "outside.txt"), []byte("secret"), 0o644)
+	os.Mkdir(filepath.Join(media, "dir"), 0o755)
+	os.WriteFile(filepath.Join(media, "dir", "a.txt"), []byte("a"), 0o644)
+	os.Symlink("notes.md", filepath.Join(media, "file-link.md"))
+	os.Symlink("dir", filepath.Join(media, "dir-link"))
+	os.Symlink("missing.txt", filepath.Join(media, "dangling"))
+	os.Symlink("../outside.txt", filepath.Join(media, "escaping"))
+
+	list := func() map[string]FileEntry {
+		t.Helper()
+		code, body := do(t, "GET", ts.URL+"/api/files?path=", "")
+		if code != 200 {
+			t.Fatalf("list: %d %s", code, body)
+		}
+		var l Listing
+		json.Unmarshal([]byte(body), &l)
+		m := map[string]FileEntry{}
+		for _, e := range l.Entries {
+			m[e.Name] = e
+		}
+		return m
+	}
+	m := list()
+	for name, want := range map[string]FileEntry{
+		"notes.md":     {Size: 5, Kind: "text"},
+		"file-link.md": {Size: 5, Kind: "text", Symlink: "notes.md"},
+		"dir-link":     {IsDir: true, Kind: "folder", Symlink: "dir"},
+		"dangling":     {Kind: "other", Symlink: "missing.txt", Broken: true},
+		"escaping":     {Kind: "other", Symlink: "../outside.txt", Broken: true},
+	} {
+		e, ok := m[name]
+		if !ok {
+			t.Errorf("%s not listed", name)
+			continue
+		}
+		if e.IsDir != want.IsDir || e.Kind != want.Kind || e.Symlink != want.Symlink || e.Broken != want.Broken ||
+			(want.Size != 0 && e.Size != want.Size) {
+			t.Errorf("%s: %+v", name, e)
+		}
+	}
+	if m["dangling"].Mode[0] != 'L' {
+		t.Errorf("broken link mode %q, want the link's own", m["dangling"].Mode)
+	}
+	if code, body := do(t, "GET", ts.URL+"/api/files/content?path=escaping", ""); code == 200 {
+		t.Errorf("read through an escaping link: %q", body)
+	}
+
+	// A broken link can be renamed, and deleting links leaves their targets.
+	if code, body := do(t, "POST", ts.URL+"/api/files/move", `{"from":"dangling","to":"renamed"}`); code != 200 ||
+		!strings.Contains(body, `"broken":true`) {
+		t.Errorf("move broken link: %d %s", code, body)
+	}
+	for _, p := range []string{"renamed", "escaping", "dir-link", "file-link.md"} {
+		if code, body := do(t, "DELETE", ts.URL+"/api/files?path="+p, ""); code != 204 {
+			t.Errorf("delete %s: %d %s", p, code, body)
+		}
+	}
+	for _, p := range []string{"notes.md", "dir/a.txt", "../outside.txt"} {
+		if _, err := os.Stat(filepath.Join(media, p)); err != nil {
+			t.Errorf("target %s gone: %v", p, err)
+		}
+	}
+}

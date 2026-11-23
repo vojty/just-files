@@ -45,11 +45,11 @@ func (s *Server) search(ctx context.Context, in *searchInput) (*response[SearchR
 	// out.
 	entries := make([]FileEntry, 0, len(found))
 	for _, p := range found {
-		fi, err := s.root.Stat(p) // follows symlinks inside the root
+		e, err := s.entry(p)
 		if err != nil {
 			continue
 		}
-		entries = append(entries, newEntry(p, fi))
+		entries = append(entries, e)
 	}
 	st := s.index.Status()
 	return &response[SearchResults]{SearchResults{

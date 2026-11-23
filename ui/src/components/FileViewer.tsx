@@ -52,7 +52,7 @@ export function FileViewer({
   const { sort } = useView();
   const { data: listing } = useQuery(queries.files(parentPath(entry.path)));
   const files = useMemo(
-    () => (listing ? sortEntries(listing.entries, sort).filter((e) => !e.isDir) : []),
+    () => (listing ? sortEntries(listing.entries, sort).filter((e) => !e.isDir && !e.broken) : []),
     [listing, sort],
   );
   const i = files.findIndex((f) => f.path === entry.path);

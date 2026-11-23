@@ -89,6 +89,10 @@
       "FileEntry": {
         "additionalProperties": false,
         "properties": {
+          "broken": {
+            "description": "The symbolic link's target is missing or outside the root folder; the other fields describe the link itself.",
+            "type": "boolean"
+          },
           "group": {
             "description": "Group owning the file; empty where the system has no owners.",
             "type": "string"
@@ -130,6 +134,10 @@
           "size": {
             "format": "int64",
             "type": "integer"
+          },
+          "symlink": {
+            "description": "Target of a symbolic link, as stored in the link; the other fields describe the target, unless it is broken.",
+            "type": "string"
           }
         },
         "required": [

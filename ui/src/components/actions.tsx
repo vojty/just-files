@@ -127,7 +127,7 @@ export function EntryMenuItems({ entry, onAction }: { entry: FileEntry; onAction
           </MenuItem>
           <FolderMenuItems dir={entry.path} onAction={onAction} inside />
         </>
-      ) : (
+      ) : entry.broken ? null : (
         <>
           <MenuItem icon="eye" onClick={() => onAction({ kind: "view", entry })}>
             View
@@ -142,7 +142,7 @@ export function EntryMenuItems({ entry, onAction }: { entry: FileEntry; onAction
           </MenuItem>
         </>
       )}
-      <MenuSeparator />
+      {!entry.broken && <MenuSeparator />}
       <MenuItem icon="pencil" onClick={() => onAction({ kind: "rename", entry })}>
         Rename…
       </MenuItem>
@@ -277,7 +277,7 @@ export function ActionDialog({
       return (
         <NameDialog
           onOpenChange={(o) => !o && onClose()}
-          title={`Rename ${action.entry.isDir ? "folder" : "file"}`}
+          title={`Rename ${action.entry.symlink !== undefined ? "link" : action.entry.isDir ? "folder" : "file"}`}
           description={action.entry.name}
           submitLabel="Rename"
           initial={action.entry.name}
@@ -310,11 +310,13 @@ export function ActionDialog({
         <Confirm
           open
           onOpenChange={(o) => !o && onClose()}
-          title={`Delete ${entry.isDir ? "folder" : "file"}?`}
+          title={`Delete ${entry.symlink !== undefined ? "link" : entry.isDir ? "folder" : "file"}?`}
           description={
-            entry.isDir
-              ? `"${entry.name}" and everything in it will be deleted permanently.`
-              : `"${entry.name}" will be deleted permanently.`
+            entry.symlink !== undefined
+              ? `The link "${entry.name}" will be deleted; ${entry.symlink}, where it points, stays.`
+              : entry.isDir
+                ? `"${entry.name}" and everything in it will be deleted permanently.`
+                : `"${entry.name}" will be deleted permanently.`
           }
           confirmLabel="Delete"
           onConfirm={() => remove.mutate(entry.path, done(`Deleted "${entry.name}"`))}

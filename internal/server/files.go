@@ -31,6 +31,8 @@ type FileEntry struct {
 	Mode    string    `json:"mode" doc:"Type and permissions, as ls -l shows them, e.g. -rw-r--r--."`
 	Owner   string    `json:"owner" doc:"User owning the file; empty where the system has no owners."`
 	Group   string    `json:"group" doc:"Group owning the file; empty where the system has no owners."`
+	Symlink string    `json:"symlink,omitempty" doc:"Target of a symbolic link, as stored in the link; the other fields describe the target, unless it is broken."`
+	Broken  bool      `json:"broken,omitempty" doc:"The symbolic link's target is missing or outside the root folder; the other fields describe the link itself."`
 }
 
 // Listing is the content of a folder.
@@ -266,6 +268,33 @@ func newEntry(rel string, fi fs.FileInfo) FileEntry {
 	}
 }
 
+// entry describes the file or folder at rel. A symbolic link is followed
+// within the root; a link that cannot be followed is still described, as
+// broken, so it can be renamed or deleted.
+func (s *Server) entry(rel string) (FileEntry, error) {
+	fi, err := s.root.Lstat(rel)
+	if err != nil || fi.Mode()&fs.ModeSymlink == 0 {
+		if err != nil {
+			return FileEntry{}, err
+		}
+		return newEntry(rel, fi), nil
+	}
+	target, err := s.root.Readlink(rel)
+	if err != nil {
+		return FileEntry{}, err
+	}
+	if tfi, err := s.root.Stat(rel); err == nil {
+		fi = tfi
+	}
+	e := newEntry(rel, fi)
+	e.Symlink = target
+	e.Broken = fi.Mode()&fs.ModeSymlink != 0
+	if e.Broken {
+		e.Kind = "other"
+	}
+	return e, nil
+}
+
 func (s *Server) listFiles(ctx context.Context, in *pathParam) (*response[Listing], error) {
 	dir, err := s.cleanPath(in.Path)
 	if err != nil {
@@ -280,12 +309,11 @@ func (s *Server) listFiles(ctx context.Context, in *pathParam) (*response[Listin
 		if s.hidden(de.Name()) {
 			continue
 		}
-		rel := path.Join(dir, de.Name())
-		fi, err := s.root.Stat(rel) // follows symlinks inside the root
+		e, err := s.entry(path.Join(dir, de.Name()))
 		if err != nil {
 			continue
 		}
-		entries = append(entries, newEntry(rel, fi))
+		entries = append(entries, e)
 	}
 	sort.Slice(entries, func(i, j int) bool {
 		a, b := entries[i], entries[j]
@@ -494,13 +522,13 @@ func (s *Server) move(ctx context.Context, in *struct{ Body MoveRequest }) (*res
 	if err != nil {
 		return nil, s.fail(ctx, err)
 	}
-	fi, err := s.root.Stat(to)
+	e, err := s.entry(to)
 	if err != nil {
 		return nil, s.fail(ctx, err)
 	}
 	s.Logger.Info("moved", "from", from, "to", to)
 	s.index.Refresh()
-	return &response[FileEntry]{newEntry(to, fi)}, nil
+	return &response[FileEntry]{e}, nil
 }
 
 func (s *Server) deleteFile(ctx context.Context, in *pathParam) (*struct{}, error) {
@@ -627,12 +655,13 @@ func (s *Server) saveContent(ctx context.Context, in *saveInput) (*response[File
 	if err == nil {
 		err = f.Close()
 	}
+	var e FileEntry
 	if err == nil {
-		fi, err = s.root.Stat(rel)
+		e, err = s.entry(rel)
 	}
 	if err != nil {
 		return nil, s.fail(ctx, err)
 	}
-	s.Logger.Info("saved", "path", rel, "size", fi.Size())
-	return &response[FileEntry]{newEntry(rel, fi)}, nil
+	s.Logger.Info("saved", "path", rel, "size", e.Size)
+	return &response[FileEntry]{e}, nil
 }
