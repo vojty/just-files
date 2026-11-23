@@ -5,6 +5,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { useState, type FormEvent } from "react";
 import { ApiError, api, describeError, joinPath, parentPath, type FileEntry } from "../api.ts";
 import { queries } from "../queries.ts";
+import { canEdit, FileEditor } from "./FileEditor.tsx";
 import { FileViewer } from "./FileViewer.tsx";
 import {
   Button,
@@ -18,12 +19,13 @@ import {
   notify,
   notifyError,
   TextField,
+  Tip,
 } from "./ui.tsx";
 
 export type Action =
-  | { kind: "mkdir"; dir: string }
+  | { kind: "mkdir" | "mkfile"; dir: string }
   | { kind: "upload"; dir: string; folder: boolean }
-  | { kind: "view" | "rename" | "move" | "delete"; entry: FileEntry };
+  | { kind: "view" | "edit" | "rename" | "move" | "delete"; entry: FileEntry };
 
 export type OnAction = (a: Action) => void;
 
@@ -67,6 +69,11 @@ export function useFileMutations(current: string) {
   return {
     mkdir: useMutation({
       mutationFn: api.mkdir,
+      onSuccess: refresh,
+      onError: failed,
+    }),
+    mkfile: useMutation({
+      mutationFn: api.createFile,
       onSuccess: refresh,
       onError: failed,
     }),
@@ -125,6 +132,11 @@ export function EntryMenuItems({ entry, onAction }: { entry: FileEntry; onAction
           <MenuItem icon="eye" onClick={() => onAction({ kind: "view", entry })}>
             View
           </MenuItem>
+          {canEdit(entry) && (
+            <MenuItem icon="code" onClick={() => onAction({ kind: "edit", entry })}>
+              Edit
+            </MenuItem>
+          )}
           <MenuItem icon="download" onClick={() => void download(entry.path)}>
             Download
           </MenuItem>
@@ -157,6 +169,9 @@ export function FolderMenuItems({
 }) {
   return (
     <>
+      <MenuItem icon="filePlus" onClick={() => onAction({ kind: "mkfile", dir })}>
+        {inside ? "New file inside…" : "New file…"}
+      </MenuItem>
       <MenuItem icon="folderPlus" onClick={() => onAction({ kind: "mkdir", dir })}>
         {inside ? "New folder inside…" : "New folder…"}
       </MenuItem>
@@ -174,6 +189,7 @@ export function FolderMenuItems({
 export function EntryMenu({ entry, onAction }: { entry: FileEntry; onAction: OnAction }) {
   return (
     <DropdownMenu
+      tip="More actions"
       trigger={{
         "aria-label": `Actions for ${entry.name}`,
         className: buttonClass("ghost", "h-8 w-8 px-0 data-popup-open:bg-neutral-200/70"),
@@ -186,22 +202,25 @@ export function EntryMenu({ entry, onAction }: { entry: FileEntry; onAction: OnA
 }
 
 /**
- * The dialog of action, if it needs one (not upload): the viewer, or one
- * asking for details. folderName names
+ * The dialog of action, if it needs one (not upload): the viewer, the
+ * editor, or one asking for details. folderName names
  * folders for the user.
  */
 export function ActionDialog({
   action,
   current,
   folderName,
+  onAction,
   onClose,
 }: {
   action: Action | null;
   current: string;
   folderName: (path: string) => string;
+  /** Runs another action, e.g. editing the file viewed. */
+  onAction: OnAction;
   onClose: () => void;
 }) {
-  const { mkdir, move, remove } = useFileMutations(current);
+  const { mkdir, mkfile, move, remove } = useFileMutations(current);
   const done = (success: string) => ({
     onSuccess: () => {
       notify(success);
@@ -211,7 +230,35 @@ export function ActionDialog({
 
   switch (action?.kind) {
     case "view":
-      return <FileViewer entry={action.entry} onClose={onClose} />;
+      return (
+        <FileViewer
+          entry={action.entry}
+          onClose={onClose}
+          onEdit={(entry) => onAction({ kind: "edit", entry })}
+        />
+      );
+    case "edit":
+      return <FileEditor entry={action.entry} onClose={onClose} />;
+    case "mkfile":
+      return (
+        <NameDialog
+          onOpenChange={(o) => !o && onClose()}
+          title="New file"
+          description={`In ${folderName(action.dir)}`}
+          submitLabel="Create"
+          initial=""
+          busy={mkfile.isPending}
+          onSubmit={(name) =>
+            mkfile.mutate(joinPath(action.dir, name), {
+              // Opens the new file in the editor, to write its content.
+              onSuccess: (entry) => {
+                notify(`File "${name}" created`);
+                onAction({ kind: "edit", entry });
+              },
+            })
+          }
+        />
+      );
     case "mkdir":
       return (
         <NameDialog
@@ -377,15 +424,17 @@ function MoveDialog({
     >
       <div className="flex flex-col overflow-hidden rounded-lg border border-neutral-200 dark:border-neutral-800">
         <div className="flex items-center gap-2 border-b border-neutral-200 bg-neutral-50 px-3 py-2 text-sm dark:border-neutral-800 dark:bg-neutral-950">
-          <Button
-            variant="ghost"
-            className="h-7 px-2"
-            disabled={dir === "."}
-            onClick={() => setDir(parentPath(dir))}
-            aria-label="Up one folder"
-          >
-            ↑
-          </Button>
+          <Tip label="Up one folder">
+            <Button
+              variant="ghost"
+              className="h-7 px-2"
+              disabled={dir === "."}
+              onClick={() => setDir(parentPath(dir))}
+              aria-label="Up one folder"
+            >
+              ↑
+            </Button>
+          </Tip>
           <span className="truncate font-medium">
             {dir === "." ? rootName : `${rootName}/${dir}`}
           </span>

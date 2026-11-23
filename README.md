@@ -79,6 +79,11 @@ for everyone, and are saved to the settings file:
 - **Uploads** stream to a hidden `.name.part` file that is renamed when
   complete, so partial uploads never show. Dropped folders are walked in the
   browser and their files uploaded into the same structure.
+- **Editing**: text files up to 5 MB open in a CodeMirror editor (Edit in
+  the menu or the viewer), as do new empty files made with New file. Saving writes the file in place, keeping its owner,
+  permissions and links, and is refused (409) if the file changed since it
+  was opened, unless the user chooses to save anyway. Only UTF-8 text is
+  editable; line breaks (`\n` or `\r\n`) and a byte order mark are kept.
 
 ## Development
 

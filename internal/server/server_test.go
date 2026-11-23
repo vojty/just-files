@@ -8,10 +8,12 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func newTestServer(t *testing.T) (*httptest.Server, string, *Server) {
@@ -386,5 +388,75 @@ func TestShowHidden(t *testing.T) {
 	ts2, _ := start()
 	if code, body := do(t, "GET", ts2.URL+"/api/settings", ""); !strings.Contains(body, `"showHidden":true`) {
 		t.Errorf("settings after restart: %d %s", code, body)
+	}
+}
+
+func TestSaveContent(t *testing.T) {
+	ts, media, _ := newTestServer(t)
+	file := filepath.Join(media, "notes.md")
+	os.WriteFile(file, []byte("a long original text"), 0o640)
+	os.Mkdir(filepath.Join(media, "dir"), 0o755)
+	os.Symlink("notes.md", filepath.Join(media, "link.md"))
+	fi, _ := os.Stat(file)
+	modTime := fi.ModTime().Format(time.RFC3339Nano)
+
+	save := func(path, query, body string) (int, string) {
+		t.Helper()
+		return do(t, "PUT", ts.URL+"/api/files/content?path="+path+query, body)
+	}
+	if code, body := save("notes.md", "&modTime="+url.QueryEscape(modTime), "short"); code != 200 ||
+		!strings.Contains(body, `"size":5`) {
+		t.Fatalf("save: %d %s", code, body)
+	}
+	if b, _ := os.ReadFile(file); string(b) != "short" {
+		t.Errorf("content %q", b)
+	}
+	if fi, _ := os.Stat(file); fi.Mode().Perm() != 0o640 {
+		t.Errorf("mode %v, want kept", fi.Mode())
+	}
+	// The file has changed since modTime.
+	if code, _ := save("notes.md", "&modTime="+url.QueryEscape(modTime), "stale"); code != 409 {
+		t.Errorf("stale save: %d, want 409", code)
+	}
+	if code, _ := save("link.md", "", "via link"); code != 200 {
+		t.Errorf("save via link: %d", code)
+	}
+	if fi, _ := os.Lstat(filepath.Join(media, "link.md")); fi.Mode()&os.ModeSymlink == 0 {
+		t.Error("link replaced by a file")
+	}
+	if b, _ := os.ReadFile(file); string(b) != "via link" {
+		t.Errorf("content %q", b)
+	}
+	for path, want := range map[string]int{"dir": 400, "missing.md": 404, ".hidden": 400} {
+		if code, _ := save(path, "", "x"); code != want {
+			t.Errorf("%s: %d, want %d", path, code, want)
+		}
+	}
+}
+
+func TestCreateFile(t *testing.T) {
+	ts, media, _ := newTestServer(t)
+	os.Mkdir(filepath.Join(media, "dir"), 0o755)
+	create := func(path string) int {
+		t.Helper()
+		code, _ := do(t, "POST", ts.URL+"/api/files/create", `{"path":"`+path+`"}`)
+		return code
+	}
+	if code := create("dir/new.txt"); code != 201 {
+		t.Fatalf("create: %d", code)
+	}
+	if fi, err := os.Stat(filepath.Join(media, "dir/new.txt")); err != nil || fi.Size() != 0 || !fi.Mode().IsRegular() {
+		t.Errorf("created: %v %v", fi, err)
+	}
+	for path, want := range map[string]int{
+		"dir/new.txt": 409, // exists
+		"dir":         409,
+		"missing/a":   404,
+		".hidden":     400,
+		"":            400,
+	} {
+		if code := create(path); code != want {
+			t.Errorf("%q: %d, want %d", path, code, want)
+		}
 	}
 }

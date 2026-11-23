@@ -19,6 +19,9 @@ export const queryClient = new QueryClient({
 /** How much of a text file the viewer shows. */
 export const TEXT_PREVIEW_LIMIT = 1024 * 1024;
 
+/** The largest file the editor opens; the server saves up to 16 MB. */
+export const EDIT_LIMIT = 5 * 1024 * 1024;
+
 export const queries = {
   /** Listing of one folder; invalidate ["files"] to refresh every folder. */
   files: (path: string) =>
@@ -51,6 +54,16 @@ export const queries = {
       queryKey: ["preview", path, modTime],
       queryFn: () => api.textPreview(path, TEXT_PREVIEW_LIMIT),
       staleTime: Infinity,
+    }),
+  /** The whole file to edit, see api.editableText. */
+  editableText: (path: string, modTime: string) =>
+    queryOptions({
+      queryKey: ["edit", path, modTime],
+      queryFn: () => api.editableText(path),
+      // Read once per opening of the editor: afresh each time it opens, and
+      // not again while it is open, which would not change its text.
+      staleTime: Infinity,
+      gcTime: 0,
     }),
   /** text of the file at path, highlighted by its name; see highlight. */
   highlight: (path: string, modTime: string, text: string) =>

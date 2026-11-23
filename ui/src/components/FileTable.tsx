@@ -235,6 +235,7 @@ function ColumnsMenu() {
   const view = useView();
   return (
     <DropdownMenu
+      tip="Columns"
       trigger={{
         "aria-label": "Choose columns",
         className: buttonClass("ghost", "h-7 w-8 px-0 data-popup-open:bg-neutral-200/70"),

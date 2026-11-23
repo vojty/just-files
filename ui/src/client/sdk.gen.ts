@@ -2,7 +2,7 @@
 
 import { type Client, type ClientMeta, formDataBodySerializer, type Options as Options2, type RequestResult, type TDataShape } from './client';
 import { client } from './client.gen';
-import type { CreateFolderData, CreateFolderErrors, CreateFolderResponses, DeleteFileData, DeleteFileErrors, DeleteFileResponses, DownloadFileData, DownloadFileErrors, DownloadFileResponses, GetFileContentData, GetFileContentErrors, GetFileContentResponses, GetInfoData, GetInfoErrors, GetInfoResponses, GetSettingsData, GetSettingsErrors, GetSettingsResponses, ListFilesData, ListFilesErrors, ListFilesResponses, MoveFileData, MoveFileErrors, MoveFileResponses, SaveSettingsData, SaveSettingsErrors, SaveSettingsResponses, SearchData, SearchErrors, SearchResponses, UploadFilesData, UploadFilesErrors, UploadFilesResponses } from './types.gen';
+import type { CreateFileData, CreateFileErrors, CreateFileResponses, CreateFolderData, CreateFolderErrors, CreateFolderResponses, DeleteFileData, DeleteFileErrors, DeleteFileResponses, DownloadFileData, DownloadFileErrors, DownloadFileResponses, GetFileContentData, GetFileContentErrors, GetFileContentResponses, GetInfoData, GetInfoErrors, GetInfoResponses, GetSettingsData, GetSettingsErrors, GetSettingsResponses, ListFilesData, ListFilesErrors, ListFilesResponses, MoveFileData, MoveFileErrors, MoveFileResponses, SaveFileContentData, SaveFileContentErrors, SaveFileContentResponses, SaveSettingsData, SaveSettingsErrors, SaveSettingsResponses, SearchData, SearchErrors, SearchResponses, UploadFilesData, UploadFilesErrors, UploadFilesResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
   /**
@@ -34,6 +34,33 @@ export const listFiles = <ThrowOnError extends boolean = false>(options?: Option
  * Supports range requests. Text files are sent as plain text, and nothing sent runs scripts: the browser treats it as sandboxed, except PDFs, which browsers do not show sandboxed.
  */
 export const getFileContent = <ThrowOnError extends boolean = false>(options?: Options<GetFileContentData, ThrowOnError>): RequestResult<GetFileContentResponses, GetFileContentErrors, ThrowOnError> => (options?.client ?? client).get<GetFileContentResponses, GetFileContentErrors, ThrowOnError>({ url: '/api/files/content', ...options });
+
+/**
+ * Replace the content of an existing file
+ *
+ * Writes the request body over the file in place, keeping its owner, permissions and links.
+ */
+export const saveFileContent = <ThrowOnError extends boolean = false>(options: Options<SaveFileContentData, ThrowOnError>): RequestResult<SaveFileContentResponses, SaveFileContentErrors, ThrowOnError> => (options.client ?? client).put<SaveFileContentResponses, SaveFileContentErrors, ThrowOnError>({
+  bodySerializer: null,
+  url: '/api/files/content',
+  ...options,
+  headers: {
+    'Content-Type': 'application/octet-stream',
+    ...options.headers
+  }
+});
+
+/**
+ * Create an empty file
+ */
+export const createFile = <ThrowOnError extends boolean = false>(options: Options<CreateFileData, ThrowOnError>): RequestResult<CreateFileResponses, CreateFileErrors, ThrowOnError> => (options.client ?? client).post<CreateFileResponses, CreateFileErrors, ThrowOnError>({
+  url: '/api/files/create',
+  ...options,
+  headers: {
+    'Content-Type': 'application/json',
+    ...options.headers
+  }
+});
 
 /**
  * Download a file

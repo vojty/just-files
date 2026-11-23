@@ -2,7 +2,7 @@ import { Progress } from "@base-ui/react/progress";
 import { useState } from "react";
 import { formatSize } from "../api.ts";
 import { cancel, clearFinished, dismiss, retry, useUploads, type Upload } from "../uploads.ts";
-import { Button, cx, Icon } from "./ui.tsx";
+import { Button, cx, Icon, Tip } from "./ui.tsx";
 
 /** Floating panel listing uploads with their progress. */
 export function UploadQueue() {
@@ -131,6 +131,21 @@ function RowActions({ upload: u }: { upload: Upload }) {
           <Button variant="secondary" className={small} onClick={() => retry(u.id, u.overwrite)}>
             Retry
           </Button>
+          <Tip label="Remove">
+            <Button
+              variant="ghost"
+              className="h-6 px-1"
+              aria-label="Remove"
+              onClick={() => dismiss(u.id)}
+            >
+              <Icon name="close" />
+            </Button>
+          </Tip>
+        </>
+      );
+    case "done":
+      return (
+        <Tip label="Remove">
           <Button
             variant="ghost"
             className="h-6 px-1"
@@ -139,18 +154,7 @@ function RowActions({ upload: u }: { upload: Upload }) {
           >
             <Icon name="close" />
           </Button>
-        </>
-      );
-    case "done":
-      return (
-        <Button
-          variant="ghost"
-          className="h-6 px-1"
-          aria-label="Remove"
-          onClick={() => dismiss(u.id)}
-        >
-          <Icon name="close" />
-        </Button>
+        </Tip>
       );
   }
 }

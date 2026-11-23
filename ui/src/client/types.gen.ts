@@ -4,6 +4,13 @@ export type ClientOptions = {
   baseUrl: `${string}://openapi.json` | (string & {});
 };
 
+export type CreateFileRequest = {
+  /**
+   * Path of the new file.
+   */
+  path: string;
+};
+
 export type ErrorDetail = {
   /**
    * Where the error occurred, e.g. 'body.items[3].tags' or 'path.thing-id'
@@ -258,6 +265,97 @@ export type GetFileContentResponses = {
 };
 
 export type GetFileContentResponse = GetFileContentResponses[keyof GetFileContentResponses];
+
+export type SaveFileContentData = {
+  body: Blob | File;
+  path?: never;
+  query: {
+    /**
+     * Slash-separated path of the file, relative to the root folder.
+     */
+    path: string;
+    /**
+     * The file's modification time when its content was read. If the file has changed since, nothing is written and the response is 409.
+     */
+    modTime?: string;
+  };
+  url: '/api/files/content';
+};
+
+export type SaveFileContentErrors = {
+  /**
+   * Bad Request
+   */
+  400: ErrorModel;
+  /**
+   * Not Found
+   */
+  404: ErrorModel;
+  /**
+   * Conflict
+   */
+  409: ErrorModel;
+  /**
+   * Unprocessable Entity
+   */
+  422: ErrorModel;
+  /**
+   * Internal Server Error
+   */
+  500: ErrorModel;
+};
+
+export type SaveFileContentError = SaveFileContentErrors[keyof SaveFileContentErrors];
+
+export type SaveFileContentResponses = {
+  /**
+   * OK
+   */
+  200: FileEntry;
+};
+
+export type SaveFileContentResponse = SaveFileContentResponses[keyof SaveFileContentResponses];
+
+export type CreateFileData = {
+  body: CreateFileRequest;
+  path?: never;
+  query?: never;
+  url: '/api/files/create';
+};
+
+export type CreateFileErrors = {
+  /**
+   * Bad Request
+   */
+  400: ErrorModel;
+  /**
+   * Not Found
+   */
+  404: ErrorModel;
+  /**
+   * Conflict
+   */
+  409: ErrorModel;
+  /**
+   * Unprocessable Entity
+   */
+  422: ErrorModel;
+  /**
+   * Internal Server Error
+   */
+  500: ErrorModel;
+};
+
+export type CreateFileError = CreateFileErrors[keyof CreateFileErrors];
+
+export type CreateFileResponses = {
+  /**
+   * Created
+   */
+  201: FileEntry;
+};
+
+export type CreateFileResponse = CreateFileResponses[keyof CreateFileResponses];
 
 export type DownloadFileData = {
   body?: never;

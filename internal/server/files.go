@@ -49,6 +49,11 @@ type MkdirRequest struct {
 	Path string `json:"path" doc:"Path of the new folder."`
 }
 
+// CreateFileRequest creates an empty file.
+type CreateFileRequest struct {
+	Path string `json:"path" doc:"Path of the new file."`
+}
+
 // MoveRequest renames or moves a file or folder.
 type MoveRequest struct {
 	From string `json:"from"`
@@ -115,6 +120,15 @@ func (s *Server) registerFiles(api huma.API) {
 		Errors:        []int{http.StatusBadRequest, http.StatusNotFound, http.StatusConflict},
 	}, s.mkdir)
 	huma.Register(api, huma.Operation{
+		OperationID:   "createFile",
+		Method:        http.MethodPost,
+		Path:          "/api/files/create",
+		Summary:       "Create an empty file",
+		Tags:          []string{"files"},
+		DefaultStatus: http.StatusCreated,
+		Errors:        []int{http.StatusBadRequest, http.StatusNotFound, http.StatusConflict},
+	}, s.createFile)
+	huma.Register(api, huma.Operation{
 		OperationID: "moveFile",
 		Method:      http.MethodPost,
 		Path:        "/api/files/move",
@@ -156,7 +170,21 @@ func (s *Server) registerFiles(api huma.API) {
 			},
 		},
 	}, s.content)
+	huma.Register(api, huma.Operation{
+		OperationID:  "saveFileContent",
+		Method:       http.MethodPut,
+		Path:         "/api/files/content",
+		Summary:      "Replace the content of an existing file",
+		Description:  "Writes the request body over the file in place, keeping its owner, permissions and links.",
+		Tags:         []string{"files"},
+		MaxBodyBytes: maxSaveBytes,
+		Errors:       []int{http.StatusBadRequest, http.StatusNotFound, http.StatusConflict},
+	}, s.saveContent)
 }
+
+// maxSaveBytes limits the size of files saved by saveContent, which the UI
+// edits in the browser.
+const maxSaveBytes = 16 << 20
 
 // kinds maps lower-case file extensions to the kind of file, for icons.
 var kinds = map[string]string{}
@@ -403,6 +431,37 @@ func (s *Server) mkdir(ctx context.Context, in *struct{ Body MkdirRequest }) (*r
 	return &response[FileEntry]{newEntry(rel, fi)}, nil
 }
 
+// createFile creates an empty file, failing if anything exists at its path.
+func (s *Server) createFile(ctx context.Context, in *struct{ Body CreateFileRequest }) (*response[FileEntry], error) {
+	rel, err := s.cleanPath(in.Body.Path)
+	if err == nil && rel == "." {
+		err = Invalid(errors.New("missing file name"))
+	}
+	if err == nil {
+		err = s.validName(path.Base(rel))
+	}
+	if err == nil {
+		err = s.requireDir(path.Dir(rel))
+	}
+	var f *os.File
+	if err == nil {
+		f, err = s.root.OpenFile(rel, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+	}
+	if err == nil {
+		err = f.Close()
+	}
+	if err != nil {
+		return nil, s.fail(ctx, err)
+	}
+	fi, err := s.root.Stat(rel)
+	if err != nil {
+		return nil, s.fail(ctx, err)
+	}
+	s.Logger.Info("file created", "path", rel)
+	s.index.Refresh()
+	return &response[FileEntry]{newEntry(rel, fi)}, nil
+}
+
 // move renames or moves a file or folder.
 func (s *Server) move(ctx context.Context, in *struct{ Body MoveRequest }) (*response[FileEntry], error) {
 	from, err := s.cleanPath(in.Body.From)
@@ -527,4 +586,53 @@ func (s *Server) content(ctx context.Context, in *pathParam) (*huma.StreamRespon
 			h.Set("Content-Security-Policy", "sandbox")
 		}
 	}), nil
+}
+
+type saveInput struct {
+	Path    string    `query:"path" required:"true" doc:"Slash-separated path of the file, relative to the root folder."`
+	ModTime time.Time `query:"modTime" doc:"The file's modification time when its content was read. If the file has changed since, nothing is written and the response is 409."`
+	RawBody []byte
+}
+
+// saveContent replaces the content of an existing file, as a text editor
+// does. It writes in place rather than to a new file renamed over the old
+// one: that keeps the file's owner, permissions, hard and symbolic links, and
+// needs permission to write the file, not its folder.
+func (s *Server) saveContent(ctx context.Context, in *saveInput) (*response[FileEntry], error) {
+	rel, err := s.cleanPath(in.Path)
+	if err != nil {
+		return nil, s.fail(ctx, err)
+	}
+	// Checked before opening: opening a FIFO for writing would block.
+	fi, err := s.root.Stat(rel)
+	switch {
+	case err != nil:
+	case !fi.Mode().IsRegular():
+		err = Invalid(fmt.Errorf("%q is not a regular file", rel))
+	case !in.ModTime.IsZero() && !fi.ModTime().Equal(in.ModTime):
+		err = Conflict(fmt.Errorf("%q has changed since it was opened", rel))
+	}
+	var f *os.File
+	if err == nil {
+		f, err = s.root.OpenFile(rel, os.O_WRONLY, 0)
+	}
+	if err != nil {
+		return nil, s.fail(ctx, err)
+	}
+	defer f.Close()
+	_, err = f.Write(in.RawBody)
+	if err == nil {
+		err = f.Truncate(int64(len(in.RawBody)))
+	}
+	if err == nil {
+		err = f.Close()
+	}
+	if err == nil {
+		fi, err = s.root.Stat(rel)
+	}
+	if err != nil {
+		return nil, s.fail(ctx, err)
+	}
+	s.Logger.Info("saved", "path", rel, "size", fi.Size())
+	return &response[FileEntry]{newEntry(rel, fi)}, nil
 }

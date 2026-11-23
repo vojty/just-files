@@ -64,6 +64,8 @@ export const api = {
   search: (path: string, q: string) => call(sdk.search({ query: { path, q } })),
   list: (path: string) => call(sdk.listFiles({ query: { path } })),
   mkdir: (path: string) => call(sdk.createFolder({ body: { path } })),
+  /** Creates an empty file, failing with a 409 ApiError if path exists. */
+  createFile: (path: string) => call(sdk.createFile({ body: { path } })),
   move: (from: string, to: string) => call(sdk.moveFile({ body: { from, to } })),
   remove: (path: string) => call(sdk.deleteFile({ query: { path } })).then(() => undefined),
   downloadUrl: (path: string) =>
@@ -99,7 +101,36 @@ export const api = {
     // A cut multi-byte character at the end decodes as U+FFFD, which is fine.
     return { text: new TextDecoder().decode(bytes) };
   },
+  /**
+   * The whole file as text to edit it, or why it cannot be: binary, or not
+   * UTF-8, which saving as UTF-8 would garble.
+   */
+  editableText: async (path: string): Promise<EditableText> => {
+    const blob = await call(sdk.getFileContent({ query: { path }, parseAs: "blob" }));
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+    if (bytes.includes(0)) return { text: null, reason: "binary" };
+    try {
+      // A byte order mark stays in the text, so saving keeps it.
+      return { text: new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes) };
+    } catch {
+      return { text: null, reason: "encoding" };
+    }
+  },
+  /**
+   * Replaces the content of the file at path with text. With modTime, the
+   * modification time of the file when it was read, fails with a 409
+   * ApiError if the file has changed since.
+   */
+  saveText: (path: string, text: string, modTime?: string) =>
+    call(
+      sdk.saveFileContent({
+        query: { path, modTime },
+        body: new Blob([text], { type: "application/octet-stream" }),
+      }),
+    ),
 };
+
+export type EditableText = { text: string } | { text: null; reason: "binary" | "encoding" };
 
 export interface TextPreview {
   text: string | null;

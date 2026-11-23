@@ -7,7 +7,8 @@ import { Input } from "@base-ui/react/input";
 import { Menu } from "@base-ui/react/menu";
 import { Switch as BaseSwitch } from "@base-ui/react/switch";
 import { Toast } from "@base-ui/react/toast";
-import type { ComponentProps, ReactNode } from "react";
+import { Tooltip } from "@base-ui/react/tooltip";
+import type { ComponentProps, ReactElement, ReactNode } from "react";
 import { errorText } from "../api.ts";
 
 export function cx(...classes: (string | false | null | undefined)[]) {
@@ -102,17 +103,50 @@ export function Switch(props: Omit<ComponentProps<typeof BaseSwitch.Root>, "clas
 export const menuPopupClass =
   "min-w-44 origin-(--transform-origin) rounded-lg border border-neutral-200 bg-white p-1 shadow-lg outline-none transition-[scale,opacity] duration-100 data-ending-style:scale-95 data-ending-style:opacity-0 data-starting-style:scale-95 data-starting-style:opacity-0 dark:border-neutral-800 dark:bg-neutral-900";
 
-/** A drop-down menu opened by trigger, which renders the trigger's button. */
+/**
+ * Shows label in a tooltip on hovering or focusing children, a single
+ * element, e.g. a button showing only an icon. Tooltips inside TipProvider
+ * share their delay: once one shows, the next ones show at once.
+ */
+export function Tip({ label, children }: { label: ReactNode; children: ReactElement }) {
+  return (
+    <Tooltip.Root>
+      <Tooltip.Trigger render={children} />
+      <Tooltip.Portal>
+        <Tooltip.Positioner sideOffset={6} className="z-70">
+          <Tooltip.Popup className="origin-(--transform-origin) rounded-md bg-neutral-900 px-2 py-1 text-xs font-medium whitespace-nowrap text-white shadow-md transition-[scale,opacity] duration-100 data-ending-style:scale-95 data-ending-style:opacity-0 data-instant:transition-none data-starting-style:scale-95 data-starting-style:opacity-0 dark:bg-neutral-100 dark:text-neutral-900">
+            {label}
+          </Tooltip.Popup>
+        </Tooltip.Positioner>
+      </Tooltip.Portal>
+    </Tooltip.Root>
+  );
+}
+
+export const TipProvider = Tooltip.Provider;
+
+/**
+ * A drop-down menu opened by trigger, which renders the trigger's button.
+ * tip describes a trigger showing only an icon.
+ */
 export function DropdownMenu({
   trigger,
+  tip,
   children,
 }: {
   trigger: ComponentProps<typeof Menu.Trigger>;
+  tip?: string;
   children: ReactNode;
 }) {
   return (
     <Menu.Root>
-      <Menu.Trigger {...trigger} />
+      {tip ? (
+        <Tip label={tip}>
+          <Menu.Trigger {...trigger} />
+        </Tip>
+      ) : (
+        <Menu.Trigger {...trigger} />
+      )}
       <Menu.Portal>
         <Menu.Positioner sideOffset={4} align="end" className="z-40 outline-none">
           <Menu.Popup className={menuPopupClass}>{children}</Menu.Popup>
@@ -294,12 +328,14 @@ export function Toasts() {
               />
               <Toast.Description className="text-sm break-words text-neutral-600 dark:text-neutral-400" />
             </div>
-            <Toast.Close
-              aria-label="Dismiss"
-              className="rounded p-0.5 text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200"
-            >
-              <Icon name="close" />
-            </Toast.Close>
+            <Tip label="Dismiss">
+              <Toast.Close
+                aria-label="Dismiss"
+                className="rounded p-0.5 text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200"
+              >
+                <Icon name="close" />
+              </Toast.Close>
+            </Tip>
           </Toast.Root>
         ))}
       </Toast.Viewport>
@@ -339,6 +375,8 @@ const iconPaths = {
   wrap: "M4 6h16M4 12h13a3 3 0 0 1 0 6h-4m0 0 2-2m-2 2 2 2M4 18h5",
   search: "M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zm9 2-4.35-4.35",
   sidebar: "M4 5h16v14H4zM9 5v14",
+  code: "m8 8-4 4 4 4M16 8l4 4-4 4M14 5l-4 14",
+  filePlus: "M6 3h8l5 5v13H6zM14 3v5h5M12 11v6M9 14h6",
 } as const;
 
 type IconName = keyof typeof iconPaths;

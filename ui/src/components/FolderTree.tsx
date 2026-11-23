@@ -5,7 +5,7 @@ import { ApiError, describeError, type FileEntry } from "../api.ts";
 import type { DragDrop } from "../dnd.ts";
 import { queries } from "../queries.ts";
 import { useContextEntry } from "./FileContextMenu.tsx";
-import { Button, cx, Icon } from "./ui.tsx";
+import { Button, cx, Icon, Tip } from "./ui.tsx";
 
 /** How long a drag has to hover over a collapsed folder to open it. */
 const SPRING_OPEN_MS = 700;
@@ -159,19 +159,21 @@ function TreeItem({
         {leaf ? (
           <span className="size-6 shrink-0" />
         ) : (
-          <Button
-            variant="plain"
-            tabIndex={-1}
-            aria-expanded={open}
-            aria-label={open ? `Collapse ${name}` : `Expand ${name}`}
-            onClick={() => tree.setOpen(path, !open)}
-            className="grid size-6 shrink-0 place-items-center rounded text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200"
-          >
-            <Icon
-              name="chevron"
-              className={cx("size-3.5 transition-transform", open && "rotate-90")}
-            />
-          </Button>
+          <Tip label={open ? "Collapse" : "Expand"}>
+            <Button
+              variant="plain"
+              tabIndex={-1}
+              aria-expanded={open}
+              aria-label={open ? `Collapse ${name}` : `Expand ${name}`}
+              onClick={() => tree.setOpen(path, !open)}
+              className="grid size-6 shrink-0 place-items-center rounded text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200"
+            >
+              <Icon
+                name="chevron"
+                className={cx("size-3.5 transition-transform", open && "rotate-90")}
+              />
+            </Button>
+          </Tip>
         )}
         <Link
           to="/"

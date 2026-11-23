@@ -6,6 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   Fragment,
   useMemo,
+  useRef,
   useState,
   type CSSProperties,
   type KeyboardEvent,
@@ -19,11 +20,12 @@ import {
   parentPath,
   type FileEntry,
 } from "../api.ts";
-import { queries, TEXT_PREVIEW_LIMIT } from "../queries.ts";
+import { EDIT_LIMIT, queries, TEXT_PREVIEW_LIMIT } from "../queries.ts";
 import { useView } from "../view.ts";
+import { canEdit } from "./FileEditor.tsx";
 import { FileIcon } from "./FileIcon.tsx";
 import { sortEntries, typeLabel } from "./FileTable.tsx";
-import { backdropClass, Button, buttonClass, cx, Icon } from "./ui.tsx";
+import { backdropClass, Button, buttonClass, cx, Icon, Tip } from "./ui.tsx";
 
 type Viewer = "image" | "video" | "audio" | "pdf" | "text";
 
@@ -34,9 +36,19 @@ function viewerFor(e: FileEntry): Viewer {
   return "text";
 }
 
-export function FileViewer({ entry: first, onClose }: { entry: FileEntry; onClose: () => void }) {
+export function FileViewer({
+  entry: first,
+  onClose,
+  onEdit,
+}: {
+  entry: FileEntry;
+  onClose: () => void;
+  /** Edit entry instead of viewing it. */
+  onEdit: (entry: FileEntry) => void;
+}) {
   const [entry, setEntry] = useState(first);
   const [wrap, setWrap] = useState(false);
+  const popup = useRef<HTMLDivElement>(null);
   const { sort } = useView();
   const { data: listing } = useQuery(queries.files(parentPath(entry.path)));
   const files = useMemo(
@@ -47,6 +59,15 @@ export function FileViewer({ entry: first, onClose }: { entry: FileEntry; onClos
   const prev = i > 0 ? files[i - 1] : undefined;
   const next = i >= 0 && i < files.length - 1 ? files[i + 1] : undefined;
   const viewer = viewerFor(entry);
+  // The preview, shared with TextPreview, tells whether a file of unknown
+  // type is text, and so can be edited.
+  const { data: preview } = useQuery({
+    ...queries.textPreview(entry.path, entry.modTime),
+    enabled: viewer === "text",
+  });
+  const editable =
+    canEdit(entry) ||
+    (viewer === "text" && typeof preview?.text === "string" && entry.size <= EDIT_LIMIT);
 
   function onKeyDown(e: KeyboardEvent) {
     // Players use the arrow keys for seeking.
@@ -63,6 +84,9 @@ export function FileViewer({ entry: first, onClose }: { entry: FileEntry; onClos
       <Dialog.Portal>
         <Dialog.Backdrop className={backdropClass} />
         <Dialog.Popup
+          ref={popup}
+          // Not the first button, which would show its tooltip.
+          initialFocus={popup}
           onKeyDown={onKeyDown}
           className="fixed inset-2 z-50 flex flex-col overflow-hidden rounded-xl bg-white shadow-xl outline-none transition-[scale,opacity] duration-150 data-ending-style:scale-95 data-ending-style:opacity-0 data-starting-style:scale-95 data-starting-style:opacity-0 sm:inset-6 dark:bg-neutral-900 dark:ring-1 dark:ring-neutral-800"
         >
@@ -78,56 +102,80 @@ export function FileViewer({ entry: first, onClose }: { entry: FileEntry; onClos
               </Dialog.Description>
             </div>
             {viewer === "text" && (
+              <Tip label="Wrap long lines">
+                <Button
+                  variant="ghost"
+                  className="h-8 w-8 px-0"
+                  aria-label="Wrap long lines"
+                  aria-pressed={wrap}
+                  onClick={() => setWrap((w) => !w)}
+                >
+                  <Icon
+                    name="wrap"
+                    className={wrap ? "text-indigo-600 dark:text-indigo-400" : undefined}
+                  />
+                </Button>
+              </Tip>
+            )}
+            {editable && (
+              <Tip label="Edit">
+                <Button
+                  variant="ghost"
+                  className="h-8 w-8 px-0"
+                  aria-label="Edit"
+                  onClick={() => onEdit(entry)}
+                >
+                  <Icon name="code" />
+                </Button>
+              </Tip>
+            )}
+            <Tip label="Previous file">
               <Button
                 variant="ghost"
                 className="h-8 w-8 px-0"
-                aria-label="Wrap long lines"
-                aria-pressed={wrap}
-                onClick={() => setWrap((w) => !w)}
+                aria-label="Previous file"
+                disabled={!prev}
+                onClick={() => prev && setEntry(prev)}
               >
-                <Icon
-                  name="wrap"
-                  className={wrap ? "text-indigo-600 dark:text-indigo-400" : undefined}
-                />
+                <Icon name="chevron" className="rotate-180" />
               </Button>
-            )}
-            <Button
-              variant="ghost"
-              className="h-8 w-8 px-0"
-              aria-label="Previous file"
-              disabled={!prev}
-              onClick={() => prev && setEntry(prev)}
-            >
-              <Icon name="chevron" className="rotate-180" />
-            </Button>
-            <Button
-              variant="ghost"
-              className="h-8 w-8 px-0"
-              aria-label="Next file"
-              disabled={!next}
-              onClick={() => next && setEntry(next)}
-            >
-              <Icon name="chevron" />
-            </Button>
-            <a
-              href={api.contentUrl(entry.path)}
-              target="_blank"
-              rel="noopener noreferrer"
-              aria-label="Open in a new tab"
-              className={buttonClass("ghost", "h-8 w-8 px-0")}
-            >
-              <Icon name="external" />
-            </a>
-            <a
-              href={api.downloadUrl(entry.path)}
-              aria-label="Download"
-              className={buttonClass("ghost", "h-8 w-8 px-0")}
-            >
-              <Icon name="download" />
-            </a>
-            <Dialog.Close aria-label="Close" className={buttonClass("ghost", "h-8 w-8 px-0")}>
-              <Icon name="close" />
-            </Dialog.Close>
+            </Tip>
+            <Tip label="Next file">
+              <Button
+                variant="ghost"
+                className="h-8 w-8 px-0"
+                aria-label="Next file"
+                disabled={!next}
+                onClick={() => next && setEntry(next)}
+              >
+                <Icon name="chevron" />
+              </Button>
+            </Tip>
+            <Tip label="Open in a new tab">
+              <a
+                href={api.contentUrl(entry.path)}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Open in a new tab"
+                className={buttonClass("ghost", "h-8 w-8 px-0")}
+              >
+                <Icon name="external" />
+              </a>
+            </Tip>
+            <Tip label="Download">
+              <a
+                href={api.downloadUrl(entry.path)}
+                aria-label="Download"
+                className={buttonClass("ghost", "h-8 w-8 px-0")}
+              >
+                <Icon name="download" />
+              </a>
+            </Tip>
+            <Tip label="Close">
+              <Dialog.Close aria-label="Close" className={buttonClass("ghost", "h-8 w-8 px-0")}>
+                <Icon name="close" />
+              </Dialog.Close>
+            </Tip>
           </header>
           <div className="min-h-0 flex-1 bg-neutral-50 dark:bg-neutral-950">
             <Preview key={entry.path} entry={entry} viewer={viewer} wrap={wrap} />

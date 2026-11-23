@@ -2,7 +2,7 @@ import { Toast } from "@base-ui/react/toast";
 import type { QueryClient } from "@tanstack/react-query";
 import { createRootRouteWithContext, Outlet } from "@tanstack/react-router";
 import { UploadQueue } from "../components/UploadQueue.tsx";
-import { Toasts, toastManager } from "../components/ui.tsx";
+import { TipProvider, Toasts, toastManager } from "../components/ui.tsx";
 
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
   component: RootLayout,
@@ -12,9 +12,11 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 function RootLayout() {
   return (
     <Toast.Provider toastManager={toastManager}>
-      <Outlet />
-      <UploadQueue />
-      <Toasts />
+      <TipProvider delay={400}>
+        <Outlet />
+        <UploadQueue />
+        <Toasts />
+      </TipProvider>
     </Toast.Provider>
   );
 }

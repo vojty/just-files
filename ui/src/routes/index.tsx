@@ -39,6 +39,7 @@ import {
   MenuItem,
   notify,
   TextInput,
+  Tip,
 } from "../components/ui.tsx";
 import { useDragDrop, type DragDrop } from "../dnd.ts";
 import { fromFiles, type UploadItem } from "../dropped.ts";
@@ -129,15 +130,17 @@ function Browser() {
   return (
     <div className="flex h-dvh flex-col" {...dnd.area(dir)}>
       <header className="z-30 flex h-14 shrink-0 items-center gap-3 border-b border-neutral-200 bg-white px-3 dark:border-neutral-800 dark:bg-neutral-950">
-        <Button
-          variant="ghost"
-          className="w-9 px-0 md:hidden"
-          aria-label={treeOpen ? "Hide folders" : "Show folders"}
-          aria-expanded={treeOpen}
-          onClick={() => setTreeOpen((o) => !o)}
-        >
-          <Icon name="sidebar" />
-        </Button>
+        <Tip label={treeOpen ? "Hide folders" : "Show folders"}>
+          <Button
+            variant="ghost"
+            className="w-9 px-0 md:hidden"
+            aria-label={treeOpen ? "Hide folders" : "Show folders"}
+            aria-expanded={treeOpen}
+            onClick={() => setTreeOpen((o) => !o)}
+          >
+            <Icon name="sidebar" />
+          </Button>
+        </Tip>
         <Link to="/" className="flex items-center gap-2 font-semibold">
           <span className="grid size-7 place-items-center rounded-md bg-indigo-600 text-white">
             <Icon name="search" className="size-3.5" />
@@ -145,13 +148,15 @@ function Browser() {
           <span className="hidden sm:inline">just-files</span>
         </Link>
         <SearchBox q={q ?? ""} scopeName={folderName(dir)} />
-        <Link
-          to="/settings"
-          aria-label="Settings"
-          className={buttonClass("ghost", "w-9 shrink-0 px-0")}
-        >
-          <Icon name="settings" />
-        </Link>
+        <Tip label="Settings">
+          <Link
+            to="/settings"
+            aria-label="Settings"
+            className={buttonClass("ghost", "w-9 shrink-0 px-0")}
+          >
+            <Icon name="settings" />
+          </Link>
+        </Tip>
       </header>
 
       <div className="relative flex min-h-0 flex-1">
@@ -175,6 +180,10 @@ function Browser() {
             <div className="flex flex-wrap items-center gap-3">
               <Breadcrumbs path={dir} rootName={info.name} dnd={dnd} />
               <div className="ml-auto flex gap-2">
+                <Button onClick={() => act({ kind: "mkfile", dir })}>
+                  <Icon name="filePlus" />
+                  New file
+                </Button>
                 <Button onClick={() => act({ kind: "mkdir", dir })}>
                   <Icon name="folderPlus" />
                   New folder
@@ -230,6 +239,7 @@ function Browser() {
         action={action}
         current={dir}
         folderName={folderName}
+        onAction={act}
         onClose={() => setAction(null)}
       />
       {picker.inputs}
@@ -392,18 +402,20 @@ function SearchBox({ q, scopeName }: { q: string; scopeName: string }) {
         }}
       />
       {value ? (
-        <Button
-          variant="plain"
-          aria-label="Clear search"
-          className="absolute top-1/2 right-2 -translate-y-1/2 rounded p-1 text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200"
-          onClick={() => {
-            setValue("");
-            void navigate({ search: (s) => ({ ...s, q: undefined }), replace: true });
-            input.current?.focus();
-          }}
-        >
-          <Icon name="close" />
-        </Button>
+        <Tip label="Clear search">
+          <Button
+            variant="plain"
+            aria-label="Clear search"
+            className="absolute top-1/2 right-2 -translate-y-1/2 rounded p-1 text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200"
+            onClick={() => {
+              setValue("");
+              void navigate({ search: (s) => ({ ...s, q: undefined }), replace: true });
+              input.current?.focus();
+            }}
+          >
+            <Icon name="close" />
+          </Button>
+        </Tip>
       ) : (
         <kbd className="pointer-events-none absolute top-1/2 right-2.5 hidden -translate-y-1/2 rounded border border-neutral-300 px-1.5 text-xs text-neutral-400 sm:block dark:border-neutral-700">
           /
