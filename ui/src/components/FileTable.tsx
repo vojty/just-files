@@ -1,8 +1,8 @@
 import { Link } from "@tanstack/react-router";
-import { useMemo, type ReactNode } from "react";
+import { useMemo, useState, type DragEvent, type ReactNode } from "react";
 import { formatSize, parentPath, type FileEntry, type FileKind } from "../api.ts";
 import type { DragDrop } from "../dnd.ts";
-import { COLUMNS, useView, type ColumnId, type Sort, type SortKey } from "../view.ts";
+import { useView, type ColumnId, type Sort, type SortKey } from "../view.ts";
 import { EntryMenu, type OnAction } from "./actions.tsx";
 import { useContextEntry } from "./FileContextMenu.tsx";
 import { FileIcon } from "./FileIcon.tsx";
@@ -164,8 +164,61 @@ export function FileTable({
   onSort: (sort: Sort | null) => void;
   showFolder?: boolean;
 }) {
-  const { columns: visible } = useView();
+  const view = useView();
+  const visible = view.columns;
   const shown: ColumnKey[] = showFolder ? ["folder", ...visible] : visible;
+  // The column whose header is being dragged, and where it would be dropped.
+  const [draggedColumn, setDraggedColumn] = useState<ColumnId | null>(null);
+  const [dropAt, setDropAt] = useState<{ id: ColumnId; after: boolean } | null>(null);
+
+  function endColumnDrag() {
+    setDraggedColumn(null);
+    setDropAt(null);
+  }
+
+  /** Lets the header of column id be dragged onto other headers to reorder the columns. */
+  function columnDrag(id: ColumnId): HeaderDrag {
+    const over = (e: DragEvent<HTMLElement>) => {
+      if (!draggedColumn || !e.dataTransfer.types.includes(COLUMN_DRAG_TYPE)) return null;
+      const rect = e.currentTarget.getBoundingClientRect();
+      return { id, after: e.clientX > rect.left + rect.width / 2 };
+    };
+    return {
+      dragging: draggedColumn === id,
+      indicator:
+        dropAt?.id === id && draggedColumn !== id ? (dropAt.after ? "after" : "before") : null,
+      source: {
+        draggable: true,
+        onDragStart: (e) => {
+          setDraggedColumn(id);
+          e.dataTransfer.effectAllowed = "move";
+          e.dataTransfer.setData(COLUMN_DRAG_TYPE, id);
+        },
+        onDragEnd: endColumnDrag,
+      },
+      target: {
+        onDragOver: (e) => {
+          const at = over(e);
+          if (!at) return;
+          e.preventDefault();
+          e.dataTransfer.dropEffect = "move";
+          if (at.id !== dropAt?.id || at.after !== dropAt.after) setDropAt(at);
+        },
+        onDragLeave: (e) => {
+          if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
+          setDropAt((d) => (d?.id === id ? null : d));
+        },
+        onDrop: (e) => {
+          const at = over(e);
+          if (!at || !draggedColumn) return;
+          e.preventDefault();
+          e.stopPropagation();
+          view.moveColumn(draggedColumn, at.id, at.after);
+          endColumnDrag();
+        },
+      },
+    };
+  }
   const rows = useMemo(() => sortEntries(entries, sort), [entries, sort]);
 
   /**
@@ -193,6 +246,7 @@ export function FileTable({
                 sort={sort}
                 onSort={sortBy}
                 alignRight={id === "size"}
+                drag={id === "folder" ? undefined : columnDrag(id)}
               />
             ))}
             <th className="w-12 px-2 text-right">
@@ -217,32 +271,62 @@ export function FileTable({
   );
 }
 
+/** Drag data type marking a drag of a column header. */
+const COLUMN_DRAG_TYPE = "application/x-just-files-column";
+
+/** Handlers and state making a column header draggable to reorder the columns. */
+interface HeaderDrag {
+  /** This header is being dragged. */
+  dragging: boolean;
+  /** The side of this header the dragged one would be dropped on. */
+  indicator: "before" | "after" | null;
+  source: {
+    draggable: true;
+    onDragStart: (e: DragEvent<HTMLElement>) => void;
+    onDragEnd: () => void;
+  };
+  target: {
+    onDragOver: (e: DragEvent<HTMLElement>) => void;
+    onDragLeave: (e: DragEvent<HTMLElement>) => void;
+    onDrop: (e: DragEvent<HTMLElement>) => void;
+  };
+}
+
 function SortHeader({
   label,
   sortKey,
   sort,
   onSort,
   alignRight = false,
+  drag,
 }: {
   label: string;
   sortKey: SortKey;
   sort: Sort | null;
   onSort: (key: SortKey) => void;
   alignRight?: boolean;
+  drag?: HeaderDrag;
 }) {
   const active = sort?.by === sortKey;
   return (
     <th
       aria-sort={active ? (sort.desc ? "descending" : "ascending") : undefined}
-      className={cx("px-2 py-1 font-medium whitespace-nowrap", alignRight && "text-right")}
+      {...drag?.target}
+      className={cx(
+        "p-1 font-medium whitespace-nowrap",
+        drag?.indicator === "before" && "shadow-[inset_2px_0_0_var(--color-indigo-500)]",
+        drag?.indicator === "after" && "shadow-[inset_-2px_0_0_var(--color-indigo-500)]",
+      )}
     >
       <Button
         variant="plain"
         onClick={() => onSort(sortKey)}
+        {...drag?.source}
         className={cx(
-          "inline-flex items-center gap-1 rounded px-2 py-1 hover:bg-neutral-100 hover:text-neutral-900 dark:hover:bg-neutral-800 dark:hover:text-neutral-100",
+          "flex w-full items-center gap-1 rounded px-3 py-1 hover:bg-neutral-100 hover:text-neutral-900 dark:hover:bg-neutral-800 dark:hover:text-neutral-100",
           alignRight && "flex-row-reverse",
           active && "text-neutral-900 dark:text-neutral-100",
+          drag?.dragging && "opacity-50",
         )}
       >
         {label}
@@ -272,7 +356,7 @@ function ColumnsMenu() {
       }}
     >
       <MenuGroup label="Columns">
-        {COLUMNS.map((id) => (
+        {view.order.map((id) => (
           <MenuCheckboxItem
             key={id}
             checked={view.columns.includes(id)}

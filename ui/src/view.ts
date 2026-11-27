@@ -2,7 +2,7 @@
 // Remembered per browser; kept outside React so every table shares it.
 import { useSyncExternalStore } from "react";
 
-export const COLUMNS = ["type", "size", "modified", "permissions", "owner", "group"] as const;
+const COLUMNS = ["type", "size", "modified", "permissions", "owner", "group"] as const;
 export type ColumnId = (typeof COLUMNS)[number];
 
 /** "folder" sorts search results by the folder they are in. */
@@ -13,12 +13,16 @@ export interface Sort {
 }
 
 export interface View {
+  /** Every column in the order the user arranged them, shown or not. */
+  order: ColumnId[];
+  /** The visible columns, in that order. */
   columns: ColumnId[];
   sort: Sort;
 }
 
 const KEY = "just-files.view";
 const DEFAULT: View = {
+  order: [...COLUMNS],
   columns: ["type", "size", "modified"],
   sort: { by: "name", desc: false },
 };
@@ -29,12 +33,16 @@ function load(): View {
   try {
     const v = JSON.parse(localStorage.getItem(KEY) ?? "null") as Partial<View> | null;
     if (!v) return DEFAULT;
-    const columns = Array.isArray(v.columns) ? v.columns.filter(isColumn) : DEFAULT.columns;
+    // Columns missing from a stored order, e.g. ones added later, go last.
+    const stored = Array.isArray(v.order) ? v.order.filter(isColumn) : [];
+    const order = [...new Set([...stored, ...COLUMNS])];
+    const shown = Array.isArray(v.columns) ? v.columns.filter(isColumn) : DEFAULT.columns;
+    const columns = order.filter((c) => shown.includes(c));
     const sort =
       v.sort && (v.sort.by === "name" || isColumn(v.sort.by))
         ? { by: v.sort.by, desc: Boolean(v.sort.desc) }
         : DEFAULT.sort;
-    return { columns, sort };
+    return { order, columns, sort };
   } catch {
     // Unavailable or invalid storage: start from the defaults.
     return DEFAULT;
@@ -65,8 +73,15 @@ export function useView() {
   return {
     ...v,
     setSort: (sort: Sort) => set({ sort }),
-    /** Shows or hides a column, keeping columns in their usual order. */
+    /** Shows or hides a column, keeping columns in the user's order. */
     toggleColumn: (id: ColumnId, show: boolean) =>
-      set({ columns: COLUMNS.filter((c) => (c === id ? show : v.columns.includes(c))) }),
+      set({ columns: v.order.filter((c) => (c === id ? show : v.columns.includes(c))) }),
+    /** Moves column id just before, or with after just after, column target. */
+    moveColumn: (id: ColumnId, target: ColumnId, after: boolean) => {
+      if (id === target) return;
+      const order = v.order.filter((c) => c !== id);
+      order.splice(order.indexOf(target) + Number(after), 0, id);
+      set({ order, columns: order.filter((c) => v.columns.includes(c)) });
+    },
   };
 }
